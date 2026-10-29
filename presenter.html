@@ -752,8 +752,8 @@ function render(){
   // dots
   const dots=document.getElementById('stepDots');
   dots.innerHTML=SLIDES.map((_,i)=>`<div class="step-dot ${i===cur?'active':i<cur?'done':''}"></div>`).join('');
-  // TTS
-  setTimeout(()=>speakSlide(cur),600);
+  // TTS — 자동 재생 중일 때만 음성 재생
+  if(playing){setTimeout(()=>speakSlide(cur),600);}
 }
 
 function next(){if(cur<SLIDES.length-1){cur++;render();}else{stopPlay()}}
