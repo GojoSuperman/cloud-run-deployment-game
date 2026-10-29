@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>9강 학습 정리</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap');
+
+:root{
+  --bg:#0b0e17;--card:#141926;--card2:#1a2035;
+  --accent:#00d4ff;--accent2:#7b61ff;--accent3:#ff6b9d;--accent4:#00e676;
+  --green:#00e676;--red:#ff5252;--orange:#ffab40;--blue:#448aff;
+  --text:#e4e8f1;--text2:#8892a6;
+  --glow:0 0 20px rgba(0,212,255,.3);
+  --glow2:0 0 20px rgba(123,97,255,.3);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font:16px/1.8 'Noto Sans KR',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+
+/* ── 배경 파티클 ── */
+.bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:radial-gradient(circle at 1px 1px, rgba(0,212,255,.07) 1px, transparent 0);
+  background-size:48px 48px}
+.bg-orb{position:fixed;border-radius:50%;filter:blur(100px);opacity:.15;z-index:0;pointer-events:none;animation:orbFloat 20s ease-in-out infinite}
+.bg-orb.o1{width:600px;height:600px;background:var(--accent);top:-200px;left:-100px}
+.bg-orb.o2{width:500px;height:500px;background:var(--accent2);bottom:-150px;right:-100px;animation-delay:-10s}
+.bg-orb.o3{width:400px;height:400px;background:var(--accent3);top:50%;left:60%;animation-delay:-5s}
+@keyframes orbFloat{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(40px,-60px) scale(1.1)}}
+
+.wrap{max-width:900px;margin:0 auto;padding:32px 16px;position:relative;z-index:1}
+
+/* ── 히어로 ── */
+.hero{text-align:center;padding:80px 20px 60px;animation:fadeUp .8s ease-out}
+.hero-badge{display:inline-block;background:linear-gradient(135deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  font-size:.85rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px}
+.hero h1{font-size:2.4rem;font-weight:900;line-height:1.3;margin-bottom:16px}
+.hero h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2),var(--accent3));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero-sub{color:var(--text2);font-size:1.1rem;max-width:600px;margin:0 auto 32px}
+.hero-quote{background:var(--card);border:1px solid rgba(0,212,255,.2);border-radius:16px;padding:20px 28px;
+  font-size:1.05rem;font-weight:500;position:relative;display:inline-block;max-width:700px;
+  box-shadow:var(--glow)}
+.hero-quote::before{content:'"';position:absolute;top:-10px;left:16px;font-size:3rem;color:var(--accent);opacity:.5}
+
+/* ── 섹션 ── */
+.section{margin:60px 0;opacity:0;transform:translateY(40px);transition:all .6s ease-out}
+.section.visible{opacity:1;transform:translateY(0)}
+.section-header{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.section-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;
+  font-size:1.5rem;flex-shrink:0}
+.section-icon.blue{background:rgba(68,138,255,.15);box-shadow:0 0 20px rgba(68,138,255,.1)}
+.section-icon.purple{background:rgba(123,97,255,.15);box-shadow:0 0 20px rgba(123,97,255,.1)}
+.section-icon.green{background:rgba(0,230,118,.15);box-shadow:0 0 20px rgba(0,230,118,.1)}
+.section-icon.orange{background:rgba(255,171,64,.15);box-shadow:0 0 20px rgba(255,171,64,.1)}
+.section-icon.pink{background:rgba(255,107,157,.15);box-shadow:0 0 20px rgba(255,107,157,.1)}
+.section-title{font-size:1.5rem;font-weight:700}
+
+/* ── 카드 ── */
+.card{background:var(--card);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:24px;margin:16px 0;
+  transition:all .3s ease;position:relative;overflow:hidden}
+.card:hover{border-color:rgba(0,212,255,.2);transform:translateY(-2px);box-shadow:var(--glow)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));opacity:0;transition:opacity .3s}
+.card:hover::before{opacity:1}
+.card h3{font-size:1.15rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card p,.card li{color:var(--text2);font-size:.95rem}
+.card ul,.card ol{margin:8px 0 8px 20px}
+.card li{margin:4px 0}
+.card strong{color:var(--text)}
+
+/* ── 배포 비교 ── */
+.deploy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin:16px 0}
+.deploy-card{background:var(--card2);border-radius:14px;padding:20px;border:1px solid rgba(255,255,255,.04);
+  transition:all .4s ease;position:relative;overflow:hidden}
+.deploy-card:hover{transform:translateY(-3px);box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.deploy-card.rolling{border-top:3px solid var(--blue)}
+.deploy-card.bluegreen{border-top:3px solid var(--green)}
+.deploy-card.canary{border-top:3px solid var(--orange)}
+.deploy-card h4{font-size:1.1rem;font-weight:700;margin-bottom:8px}
+.deploy-card p{font-size:.88rem;color:var(--text2)}
+.deploy-tag{display:inline-block;font-size:.75rem;font-weight:600;padding:3px 10px;border-radius:20px;margin-top:12px}
+.deploy-tag.pro{background:rgba(0,230,118,.12);color:var(--green)}
+.deploy-tag.con{background:rgba(255,82,82,.12);color:var(--red)}
+
+/* ── 아키텍처 다이어그램 ── */
+.arch-diagram{background:var(--card2);border-radius:16px;padding:32px;margin:20px 0;text-align:center;
+  border:1px solid rgba(0,212,255,.1)}
+.arch-flow{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin:20px 0}
+.arch-node{background:var(--card);border:2px solid;border-radius:12px;padding:14px 20px;min-width:100px;
+  text-align:center;position:relative;transition:all .3s}
+.arch-node.browser{border-color:var(--accent3)}
+.arch-node.cloudrun{border-color:var(--accent);box-shadow:var(--glow)}
+.arch-node.server-blue{border-color:var(--blue)}
+.arch-node.server-green{border-color:var(--green)}
+.arch-node .icon{font-size:1.8rem;display:block;margin-bottom:4px}
+.arch-node .label{font-size:.85rem;font-weight:600}
+.arch-arrow{color:var(--accent);font-size:1.5rem;margin:0 8px;animation:arrowPulse 1.5s ease-in-out infinite}
+.arch-arrow.split{display:flex;flex-direction:column;gap:4px}
+@keyframes arrowPulse{0%,100%{opacity:.4}50%{opacity:1}}
+.arch-branch{display:flex;flex-direction:column;gap:12px}
+
+/* ── 실험 결과 카운터 ── */
+.result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin:16px 0}
+.result-stat{background:var(--card2);border-radius:12px;padding:18px;text-align:center;
+  border:1px solid rgba(255,255,255,.04)}
+.result-stat .num{font-size:2.2rem;font-weight:900;line-height:1}
+.result-stat .num.success{color:var(--green)}
+.result-stat .num.fail{color:var(--red)}
+.result-stat .num.neutral{color:var(--accent)}
+.result-stat .desc{font-size:.8rem;color:var(--text2);margin-top:6px}
+
+/* ── 프로그레스 바 ── */
+.progress-wrap{margin:16px 0}
+.progress-label{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:6px}
+.progress-bar{height:8px;background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden}
+.progress-fill{height:100%;border-radius:4px;transition:width 1.5s ease-out;width:0}
+.progress-fill.blue-fill{background:linear-gradient(90deg,var(--blue),var(--accent))}
+.progress-fill.green-fill{background:linear-gradient(90deg,var(--green),#69f0ae)}
+
+/* ── 터미널 ── */
+.terminal{background:#0d1117;border:1px solid #30363d;border-radius:12px;margin:16px 0;overflow:hidden}
+.terminal-header{background:#161b22;padding:8px 14px;display:flex;align-items:center;gap:8px}
+.terminal-dot{width:10px;height:10px;border-radius:50%}
+.terminal-dot.r{background:#ff5f57}.terminal-dot.y{background:#febc2e}.terminal-dot.g{background:#28c840}
+.terminal-title{font-size:.75rem;color:#8b949e;margin-left:8px}
+.terminal-body{padding:16px;font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:.85rem;
+  line-height:1.7;color:#c9d1d9;white-space:pre-wrap;overflow-x:auto}
+.terminal-body .prompt{color:var(--green)}.terminal-body .cmd{color:#f0f6fc;font-weight:600}
+.terminal-body .ok{color:var(--green)}.terminal-body .err{color:var(--red)}
+.terminal-body .dim{color:#6e7681}
+
+/* ── 타임라인 ── */
+.timeline{position:relative;padding-left:32px;margin:20px 0}
+.timeline::before{content:'';position:absolute;left:11px;top:0;bottom:0;width:2px;
+  background:linear-gradient(180deg,var(--accent),var(--accent2),var(--accent3))}
+.tl-item{position:relative;margin:20px 0;padding-left:20px;opacity:0;transform:translateX(-20px);transition:all .5s ease-out}
+.tl-item.visible{opacity:1;transform:translateX(0)}
+.tl-dot{position:absolute;left:-25px;top:4px;width:14px;height:14px;border-radius:50%;border:3px solid var(--accent);
+  background:var(--bg)}
+.tl-item:nth-child(2) .tl-dot{border-color:var(--accent2)}
+.tl-item:nth-child(3) .tl-dot{border-color:var(--green)}
+.tl-item:nth-child(4) .tl-dot{border-color:var(--orange)}
+.tl-item:nth-child(5) .tl-dot{border-color:var(--accent3)}
+.tl-item:nth-child(6) .tl-dot{border-color:var(--green)}
+.tl-step{font-size:.75rem;color:var(--accent);font-weight:600;letter-spacing:1px}
+.tl-title{font-size:1rem;font-weight:600;margin:4px 0}
+.tl-desc{font-size:.88rem;color:var(--text2)}
+
+/* ── 게임 CTA ── */
+.game-cta{background:linear-gradient(135deg,rgba(0,212,255,.08),rgba(123,97,255,.08),rgba(255,107,157,.08));
+  border:1px solid rgba(0,212,255,.15);border-radius:20px;padding:32px;text-align:center;margin:24px 0;
+  position:relative;overflow:hidden}
+.game-cta::before{content:'';position:absolute;inset:-2px;border-radius:22px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2),var(--accent3));
+  opacity:.15;z-index:0}
+.game-cta>*{position:relative;z-index:1}
+.game-cta h3{font-size:1.3rem;margin-bottom:8px}
+.game-btn{display:inline-block;background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;font-weight:700;font-size:1rem;padding:12px 32px;border-radius:30px;text-decoration:none;
+  margin:16px 8px 0;transition:all .3s;box-shadow:0 4px 20px rgba(0,212,255,.3)}
+.game-btn:hover{transform:translateY(-2px);box-shadow:0 6px 28px rgba(0,212,255,.5)}
+.game-modes{display:flex;justify-content:center;gap:16px;margin-top:20px;flex-wrap:wrap}
+.game-mode{background:var(--card);border-radius:12px;padding:14px 20px;min-width:160px;
+  border:1px solid rgba(255,255,255,.06)}
+.game-mode .gm-icon{font-size:1.5rem}
+.game-mode .gm-title{font-weight:600;font-size:.9rem;margin:4px 0}
+.game-mode .gm-desc{font-size:.78rem;color:var(--text2)}
+
+/* ── 요약 테이블 ── */
+.summary-table{width:100%;border-collapse:separate;border-spacing:0;margin:16px 0;border-radius:12px;overflow:hidden}
+.summary-table th{background:linear-gradient(135deg,rgba(0,212,255,.1),rgba(123,97,255,.1));
+  color:var(--accent);font-weight:600;padding:12px 16px;text-align:left;font-size:.85rem;
+  border-bottom:1px solid rgba(0,212,255,.15)}
+.summary-table td{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);font-size:.9rem;color:var(--text2)}
+.summary-table tr:last-child td{border-bottom:none}
+.summary-table tr:hover td{background:rgba(0,212,255,.03)}
+
+/* ── 코드 블록 ── */
+.code-block{background:#0d1117;border-radius:10px;padding:16px;margin:12px 0;
+  font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:.83rem;line-height:1.6;
+  color:#c9d1d9;overflow-x:auto;border:1px solid #30363d}
+.code-block .kw{color:#ff7b72}.code-block .str{color:#a5d6ff}
+.code-block .cmt{color:#6e7681;font-style:italic}
+
+/* ── 태그 ── */
+.tag{display:inline-block;font-size:.75rem;font-weight:600;padding:3px 10px;border-radius:20px;margin:2px 3px}
+.tag.t-blue{background:rgba(68,138,255,.15);color:var(--blue)}
+.tag.t-green{background:rgba(0,230,118,.15);color:var(--green)}
+.tag.t-orange{background:rgba(255,171,64,.15);color:var(--orange)}
+.tag.t-pink{background:rgba(255,107,157,.15);color:var(--accent3)}
+
+/* ── 실험 vs 기대 ── */
+.vs-row{display:flex;gap:12px;margin:12px 0;flex-wrap:wrap}
+.vs-box{flex:1;min-width:200px;background:var(--card2);border-radius:10px;padding:14px;border:1px solid rgba(255,255,255,.04)}
+.vs-box h5{font-size:.8rem;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+.vs-box p{font-size:.9rem}
+
+/* ── 애니메이션 ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes countUp{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.shimmer{background:linear-gradient(90deg,transparent,rgba(255,255,255,.05),transparent);
+  background-size:200% 100%;animation:shimmer 3s infinite}
+
+/* ── 반응형 ── */
+@media(max-width:600px){
+  .hero h1{font-size:1.6rem}
+  .arch-flow{flex-direction:column;gap:8px}
+  .arch-arrow{transform:rotate(90deg)}
+  .result-grid{grid-template-columns:1fr 1fr}
+  .deploy-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-orb o1"></div>
+<div class="bg-orb o2"></div>
+<div class="bg-orb o3"></div>
+
+<div class="wrap">
+
+<!-- ═══ 히어로 ═══ -->
+<div class="hero">
+  <div class="hero-badge">Module 9 — Learning Summary</div>
+  <h1><span>Cloud Run으로<br>무중단 배포하기</span></h1>
+  <p class="hero-sub">Cloud Run의 리비전과 트래픽으로 무중단 배포를 구성하고 자동화했습니다</p>
+  <div class="hero-quote">Cloud Run이 로드밸런서를 맡고, 리비전 사이의 트래픽 설정으로 요청을 옮기면, 사용자는 끊김 없이 새 버전을 받는다.</div>
+</div>
+
+<!-- ═══ 게임 CTA ═══ -->
+<div class="section" data-anim>
+  <div class="game-cta">
+    <h3>🎮 인터랙티브 학습 게임</h3>
+    <p style="color:var(--text2)">이번 강의 내용을 게임으로 복습할 수 있습니다</p>
+    <a class="game-btn" href="#" target="_blank">
+      게임 바로가기 →
+    </a>
+    <div class="game-modes">
+      <div class="game-mode"><div class="gm-icon">🧩</div><div class="gm-title">문제게임</div><div class="gm-desc">7 스테이지 퀴즈/매칭/조립/시뮬레이션</div></div>
+      <div class="game-mode"><div class="gm-icon">🔫</div><div class="gm-title">슈팅게임</div><div class="gm-desc">3단계 트래픽/프로브/파이프라인</div></div>
+      <div class="game-mode"><div class="gm-icon">📖</div><div class="gm-title">정리노트</div><div class="gm-desc">게임 내 요약 열람</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 1. 오늘 배운 핵심 개념 ═══ -->
+<div class="section" data-anim>
+  <div class="section-header">
+    <div class="section-icon blue">📚</div>
+    <h2 class="section-title">1. 오늘 배운 핵심 개념</h2>
+  </div>
+
+  <!-- Cloud Run의 역할 -->
+  <div class="card">
+    <h3>☁️ Cloud Run의 역할</h3>
+    <ul>
+      <li><strong>Cloud Run = 로드밸런서 역할</strong>. 서비스 주소로 온 요청을 리비전으로 분배</li>
+      <li><strong>리비전</strong> = 배포할 때마다 만들어지는 이미지+설정 한 벌</li>
+      <li><strong>트래픽 설정</strong> = 어느 리비전에 요청의 몇 %를 보낼지 정한 것</li>
+    </ul>
+    <div class="arch-diagram">
+      <div class="arch-flow">
+        <div class="arch-node browser"><span class="icon">🌐</span><span class="label">브라우저</span></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node cloudrun"><span class="icon">☁️</span><span class="label">Cloud Run</span><div style="font-size:.7rem;color:var(--text2)">LB 역할</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-branch">
+          <div class="arch-node server-blue"><span class="icon">📦</span><span class="label">v1 100%</span></div>
+          <div class="arch-node server-green"><span class="icon">📦</span><span class="label">v2 0%</span></div>
+        </div>
+      </div>
+      <p style="color:var(--text2);font-size:.85rem;margin-top:12px">Cloud Run이 트래픽 설정에 따라 리비전 사이에 요청을 분배합니다</p>
+    </div>
+  </div>
+
+  <!-- 기본 배포 순서 -->
+  <div class="card">
+    <h3>🔄 기본 배포 순서</h3>
+    <div class="timeline">
+      <div class="tl-item" data-anim-tl>
+        <div class="tl-dot"></div>
+        <div class="tl-step">STEP 1</div>
+        <div class="tl-title">새 리비전 인스턴스 켜기</div>
+        <div class="tl-desc">새 이미지와 설정으로 인스턴스를 시작합니다</div>
+      </div>
+      <div class="tl-item" data-anim-tl>
+        <div class="tl-dot"></div>
+        <div class="tl-step">STEP 2</div>
+        <div class="tl-title">스타트업 프로브 통과 확인</div>
+        <div class="tl-desc">앱이 요청을 받을 준비가 됐는지 확인합니다</div>
+      </div>
+      <div class="tl-item" data-anim-tl>
+        <div class="tl-dot"></div>
+        <div class="tl-step">STEP 3</div>
+        <div class="tl-title">트래픽 100% 새 리비전으로</div>
+        <div class="tl-desc">프로브 통과 후 모든 요청을 새 리비전으로 보냅니다</div>
+      </div>
+      <div class="tl-item" data-anim-tl>
+        <div class="tl-dot"></div>
+        <div class="tl-step">STEP 4</div>
+        <div class="tl-title">이전 인스턴스에 SIGTERM</div>
+        <div class="tl-desc">이전 리비전의 인스턴스에 종료 신호를 보냅니다</div>
+      </div>
+      <div class="tl-item" data-anim-tl>
+        <div class="tl-dot"></div>
+        <div class="tl-step">STEP 5</div>
+        <div class="tl-title">10초 그레이스풀 셧다운 후 종료</div>
+        <div class="tl-desc">진행 중인 요청을 마무리한 뒤 인스턴스를 종료합니다</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 스타트업 프로브 -->
+  <div class="card">
+    <h3>🏥 스타트업 프로브</h3>
+    <div class="vs-row">
+      <div class="vs-box">
+        <h5>기본 프로브</h5>
+        <p>포트가 열렸는지만 확인 → 준비 안 됐어도 트래픽 옮김 → <strong style="color:var(--red)">503 발생</strong></p>
+      </div>
+      <div class="vs-box">
+        <h5>/health 프로브</h5>
+        <p>앱이 진짜 준비됐는지 확인 → 준비될 때까지 이전 리비전 유지 → <strong style="color:var(--green)">실패 0건</strong></p>
+      </div>
+    </div>
+
+    <div class="result-grid">
+      <div class="result-stat"><div class="num fail" data-count="12">0</div><div class="desc">기본 프로브 + SLOW_START=30s<br>실패 여러 건</div></div>
+      <div class="result-stat"><div class="num success" data-count="0">0</div><div class="desc">/health 프로브 + SLOW_START=30s<br>실패 0건</div></div>
+      <div class="result-stat"><div class="num neutral" data-count="30">0</div><div class="desc">/health 프로브 배포 시간<br>+30초 추가</div></div>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot r"></div><div class="terminal-dot y"></div><div class="terminal-dot g"></div>
+        <span class="terminal-title">스타트업 프로브 설정</span>
+      </div>
+      <div class="terminal-body"><span class="dim"># 스타트업 프로브 설정</span>
+<span class="cmd">--startup-probe=httpGet.path=/health,periodSeconds=5,failureThreshold=12,timeoutSeconds=2</span></div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-label"><span>준비 완료 전 이전 리비전이 답하는 비율</span><span>100%</span></div>
+      <div class="progress-bar"><div class="progress-fill blue-fill" data-width="100"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 2. 배포 방식 ═══ -->
+<div class="section" data-anim>
+  <div class="section-header">
+    <div class="section-icon purple">🎯</div>
+    <h2 class="section-title">2. 배포 방식</h2>
+  </div>
+
+  <!-- 태그 URL과 블루그린 -->
+  <div class="card">
+    <h3>🏷️ 태그 URL과 블루그린</h3>
+    <ul>
+      <li><code>--no-traffic</code>으로 0% 배포, <code>--tag green</code>으로 태그 URL 생성</li>
+      <li><strong>태그 URL</strong> = <code>https://green---서비스명.run.app</code> (트래픽과 무관하게 접근)</li>
+    </ul>
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot r"></div><div class="terminal-dot y"></div><div class="terminal-dot g"></div>
+        <span class="terminal-title">gcloud CLI</span>
+      </div>
+      <div class="terminal-body"><span class="prompt">$</span> <span class="cmd">gcloud run services update friend-agent-staging \</span>
+    <span class="cmd">--update-env-vars "BANNER=GREEN" \</span>
+    <span class="cmd">--no-traffic --tag green</span>
+<span class="ok">✓</span> 태그 URL: <span class="str">https://green---friend-agent-staging-xxx.run.app</span></div>
+    </div>
+  </div>
+
+  <!-- 배포 방식 비교 -->
+  <div class="card">
+    <h3>⚖️ 배포 방식 비교</h3>
+    <div class="deploy-grid">
+      <div class="deploy-card rolling">
+        <h4>기본 배포</h4>
+        <p>준비되면 바로 100%</p>
+        <span class="deploy-tag pro">+ 간단</span>
+        <span class="deploy-tag con">- 롤백 느림</span>
+      </div>
+      <div class="deploy-card bluegreen">
+        <h4>블루그린</h4>
+        <p>0% → 태그 확인 → 100%</p>
+        <span class="deploy-tag pro">+ 빠른 롤백</span>
+        <span class="deploy-tag con">- 수동 확인 필요</span>
+      </div>
+      <div class="deploy-card canary">
+        <h4>카나리</h4>
+        <p>10% → 50% → 100%</p>
+        <span class="deploy-tag pro">+ 위험 최소화</span>
+        <span class="deploy-tag con">- 요청 많아야 의미</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 배포 방식 선택 기준 -->
+  <div class="card">
+    <h3>📊 배포 방식 선택 기준</h3>
+    <table class="summary-table">
+      <tr><th>기준</th><th>맞는 방식</th></tr>
+      <tr><td>요청 수 적음 (하루 수십 건)</td><td><strong>블루그린</strong></td></tr>
+      <tr><td>특정 사용자에서만 문제</td><td><strong>카나리</strong></td></tr>
+      <tr><td>두 버전 함께 못 돌림</td><td><strong>블루그린</strong></td></tr>
+      <tr><td>리비전별 모니터링 없음</td><td><strong>블루그린 / 기본</strong></td></tr>
+      <tr><td>작은 변경</td><td><strong>기본 배포</strong></td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ 3. 트래픽 고정과 롤백 ═══ -->
+<div class="section" data-anim>
+  <div class="section-header">
+    <div class="section-icon orange">⚠️</div>
+    <h2 class="section-title">3. 트래픽 고정과 롤백</h2>
+  </div>
+
+  <!-- 트래픽 고정의 함정 -->
+  <div class="card">
+    <h3>📌 트래픽 고정의 함정</h3>
+    <ul>
+      <li>롤백/카나리 → 트래픽이 특정 리비전에 <strong>고정</strong></li>
+      <li>새 배포해도 0% → <strong>"배포 성공인데 사용자는 이전 버전"</strong></li>
+      <li>해결: <code>update-traffic --to-latest</code></li>
+    </ul>
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot r"></div><div class="terminal-dot y"></div><div class="terminal-dot g"></div>
+        <span class="terminal-title">트래픽 고정 해제</span>
+      </div>
+      <div class="terminal-body"><span class="prompt">$</span> <span class="cmd">gcloud run services update-traffic --to-latest</span>
+<span class="ok">✓</span> 트래픽이 가장 최근 리비전을 따라가게 설정됨</div>
+    </div>
+  </div>
+
+  <!-- 롤백 신호 5가지 -->
+  <div class="card">
+    <h3>⚡ 롤백 신호 5가지</h3>
+    <table class="summary-table">
+      <tr><th>신호</th><th>무엇을 보나</th><th>롤백 기준</th></tr>
+      <tr><td><strong>오류율</strong></td><td>5xx 응답 비율</td><td>이전 리비전의 2배 이상</td></tr>
+      <tr><td><strong>지연 시간</strong></td><td>p95 응답 시간</td><td>1초 이상</td></tr>
+      <tr><td><strong>핵심 기능</strong></td><td>로그인, 메시지 전송</td><td>한 번이라도 실패</td></tr>
+      <tr><td><strong>인스턴스 상태</strong></td><td>시작 실패, 메모리 초과</td><td>이전에 없던 일</td></tr>
+      <tr><td><strong>사용자/비용</strong></td><td>신고, API 비용</td><td>갑자기 늘어남</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ 4. 데이터베이스 연결 ═══ -->
+<div class="section" data-anim>
+  <div class="section-header">
+    <div class="section-icon green">💾</div>
+    <h2 class="section-title">4. 데이터베이스 연결</h2>
+  </div>
+
+  <!-- Supabase로 무상태 만들기 -->
+  <div class="card">
+    <h3>💾 Supabase로 무상태 만들기</h3>
+    <ul>
+      <li>인스턴스 메모리 데이터 → <strong>리비전 바뀌면 사라짐</strong></li>
+      <li>Supabase(PostgreSQL)로 이동 → <strong>어느 리비전이든 같은 대화</strong></li>
+    </ul>
+    <div class="arch-diagram">
+      <div class="arch-flow">
+        <div class="arch-node server-blue"><span class="icon">📦</span><span class="label">리비전 v1</span></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-node cloudrun"><span class="icon">🗄️</span><span class="label">Supabase DB</span></div>
+        <div class="arch-arrow">←</div>
+        <div class="arch-node server-green"><span class="icon">📦</span><span class="label">리비전 v2</span></div>
+      </div>
+      <p style="color:var(--text2);font-size:.85rem;margin-top:12px">데이터를 외부 DB에 두면 어떤 리비전이 응답해도 같은 데이터를 봅니다</p>
+    </div>
+  </div>
+
+  <!-- 키 관리 -->
+  <div class="card">
+    <h3>🔐 키 관리</h3>
+    <table class="summary-table">
+      <tr><th>값</th><th>넣는 곳</th><th>이유</th></tr>
+      <tr><td><strong>프로젝트 URL</strong></td><td>환경변수</td><td>공개 값</td></tr>
+      <tr><td><strong>publishable key</strong></td><td>환경변수</td><td>브라우저 로그인용, RLS가 보호</td></tr>
+      <tr><td><strong>secret key</strong></td><td>Secret Manager</td><td>RLS 건너뜀, 서버에서만</td></tr>
+    </table>
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="terminal-dot r"></div><div class="terminal-dot y"></div><div class="terminal-dot g"></div>
+        <span class="terminal-title">환경변수 + Secret Manager 설정</span>
+      </div>
+      <div class="terminal-body"><span class="prompt">$</span> <span class="cmd">gcloud run services update friend-agent-staging \</span>
+    <span class="cmd">--update-env-vars STORAGE=supabase,AUTH=supabase,SUPABASE_URL=...,SUPABASE_PUBLISHABLE_KEY=... \</span>
+    <span class="cmd">--update-secrets SUPABASE_SECRET_KEY=supabase-secret-staging:latest</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 5. 자동 배포 파이프라인 ═══ -->
+<div class="section" data-anim>
+  <div class="section-header">
+    <div class="section-icon pink">🤖</div>
+    <h2 class="section-title">5. 자동 배포 파이프라인</h2>
+  </div>
+
+  <!-- 머지 한 번으로 무중단 배포 -->
+  <div class="card">
+    <h3>🔄 머지 한 번으로 무중단 배포</h3>
+    <div class="timeline">
+      <div class="tl-item" data-anim-tl>
+        <div class="tl-dot"></div>
+        <div class="tl-step">STEP 1</div>
+        <div class="tl-title">PR 머지 & 배포 승인</div>
+        <div class="tl-desc">코드 리뷰 후 머지하면 워크플로가 시작됩니다</div>
+      </div>
+      <div class="tl-item" data-anim-tl>
+        <div class="tl-dot"></div>
+        <div class="tl-step">STEP 2</div>
+        <div class="tl-title">이미지 빌드 & 0% 배포 + 태그</div>
+        <div class="tl-desc">새 이미지를 빌드하고 트래픽 없이 배포, 태그 URL 생성</div>
+      </div>
+      <div class="tl-item" data-anim-tl>
+        <div class="tl-dot"></div>
+        <div class="tl-step">STEP 3</div>
+        <div class="tl-title">스모크 테스트 (태그 URL)</div>
+        <div class="tl-desc">/health 정상 + /version 커밋 일치 확인</div>
+      </div>
+      <div class="tl-item" data-anim-tl>
+        <div class="tl-dot"></div>
+        <div class="tl-step">STEP 4</div>
+        <div class="tl-title">트래픽 100% 전환</div>
+        <div class="tl-desc">테스트 통과 후 모든 트래픽을 새 리비전으로 이동</div>
+      </div>
+      <div class="tl-item" data-anim-tl>
+        <div class="tl-dot"></div>
+        <div class="tl-step">STEP 5</div>
+        <div class="tl-title">(문제 시) 원클릭 롤백</div>
+        <div class="tl-desc">rollback.yml로 이전 리비전에 트래픽 100% — 몇 초 만에 완료</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 스모크 테스트 -->
+  <div class="card">
+    <h3>🧪 스모크 테스트</h3>
+    <ul>
+      <li><strong>태그 URL</strong>로 확인 (서비스 주소는 이전 리비전이 답하므로)</li>
+      <li><code>/health</code> 정상 + <code>/version</code> 커밋 일치 확인</li>
+      <li>실패 → 워크플로 실패 → 전환 안 함</li>
+    </ul>
+  </div>
+
+  <!-- 원클릭 롤백 -->
+  <div class="card">
+    <h3>⏪ 원클릭 롤백</h3>
+    <ul>
+      <li><code>rollback.yml</code> + <code>workflow_dispatch</code></li>
+      <li>이전 리비전으로 트래픽 100%</li>
+      <li><strong>몇 초 만에 완료</strong></li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══ 6. 한 장 요약 ═══ -->
+<div class="section" data-anim>
+  <div class="section-header">
+    <div class="section-icon blue">📋</div>
+    <h2 class="section-title">6. 한 장 요약</h2>
+  </div>
+  <div class="card">
+    <table class="summary-table">
+      <tr><th style="width:40px">#</th><th>핵심</th></tr>
+      <tr><td><strong>1</strong></td><td>Cloud Run이 로드밸런서: 리비전 사이 트래픽 설정으로 요청 배분</td></tr>
+      <tr><td><strong>2</strong></td><td>스타트업 프로브를 /health로 → 준비 늦어도 실패 0건</td></tr>
+      <tr><td><strong>3</strong></td><td>태그 URL로 0% 리비전을 사용자 영향 없이 확인</td></tr>
+      <tr><td><strong>4</strong></td><td>롤백 = 트래픽 설정만 바꿈 → 몇 초</td></tr>
+      <tr><td><strong>5</strong></td><td>트래픽 고정: --to-latest로 풀어야 새 배포가 트래픽 받음</td></tr>
+      <tr><td><strong>6</strong></td><td>secret key → Secret Manager, publishable key → 환경변수</td></tr>
+      <tr><td><strong>7</strong></td><td>0% 배포 → 스모크 테스트 → 전환을 워크플로로 자동화</td></tr>
+      <tr><td><strong>8</strong></td><td>무중단 = 요청 확인 스크립트 실패 0건으로 증명</td></tr>
+    </table>
+  </div>
+
+  <!-- 아직 남은 숙제 -->
+  <div class="card">
+    <h3>📝 아직 남은 숙제</h3>
+    <ul>
+      <li>답변 품질 모니터링 (<code>/health</code>만으로 불가)</li>
+      <li>스키마 변경 배포 미시험</li>
+      <li>staging/production 서비스 계정 분리</li>
+      <li>카나리 자동 승격</li>
+    </ul>
+  </div>
+</div>
+
+</div><!-- .wrap -->
+
+<script>
+// ── 스크롤 애니메이션 ──
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if(e.isIntersecting){ e.target.classList.add('visible'); }});
+}, {threshold: 0.1});
+document.querySelectorAll('.section[data-anim]').forEach(el => observer.observe(el));
+document.querySelectorAll('.tl-item[data-anim-tl]').forEach((el, i) => {
+  const tlObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if(e.isIntersecting){ setTimeout(() => e.target.classList.add('visible'), i * 150); }});
+  }, {threshold: 0.2});
+  tlObs.observe(el);
+});
+
+// ── 카운터 애니메이션 ──
+const countObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(!e.isIntersecting) return;
+    const el = e.target;
+    const target = parseInt(el.dataset.count);
+    if(el.dataset.done) return;
+    el.dataset.done = '1';
+    let current = 0;
+    const step = Math.max(1, Math.ceil(target / 30));
+    const timer = setInterval(() => {
+      current += step;
+      if(current >= target){ current = target; clearInterval(timer); }
+      el.textContent = current;
+    }, 30);
+  });
+}, {threshold: 0.5});
+document.querySelectorAll('[data-count]').forEach(el => countObserver.observe(el));
+
+// ── 프로그레스 바 애니메이션 ──
+const barObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting){ e.target.style.width = e.target.dataset.width + '%'; }
+  });
+}, {threshold: 0.3});
+document.querySelectorAll('.progress-fill').forEach(el => barObserver.observe(el));
+</script>
+</body>
+</html>

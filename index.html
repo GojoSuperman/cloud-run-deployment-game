@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud Run 무중단 배포 미션</title>
+<style>
+:root{
+  --bg:#fff8ee; --card:#ffffff; --ink:#2a2118; --sub:#7a6a58; --line:#efe1cc;
+  --accent:#e2731c; --accent2:#2f6fde; --soft:#fff0dc; --ok:#1f9a55; --ok-soft:#e3f6ea;
+  --bad:#d64545; --bad-soft:#fde8e8; --code:#f6efe4; --lock:#cfc3b2; --gold:#f2b705;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1b1712; --card:#262019; --ink:#f3ebe0; --sub:#b8a892; --line:#3a3127;
+    --accent:#ff9a45; --accent2:#7aa7ff; --soft:#3a2a1a; --ok:#5fd18f; --ok-soft:#1d3527;
+    --bad:#ff7d7d; --bad-soft:#3d2222; --code:#2f2820; --lock:#5a4f42; --gold:#ffcc33;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1b1712; --card:#262019; --ink:#f3ebe0; --sub:#b8a892; --line:#3a3127;
+  --accent:#ff9a45; --accent2:#7aa7ff; --soft:#3a2a1a; --ok:#5fd18f; --ok-soft:#1d3527;
+  --bad:#ff7d7d; --bad-soft:#3d2222; --code:#2f2820; --lock:#5a4f42; --gold:#ffcc33;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;word-break:keep-all}
+main{max-width:820px;margin:0 auto;padding:20px 16px 80px}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+code{background:var(--code);padding:1px 6px;border-radius:5px;font-family:ui-monospace,Consolas,monospace;font-size:.86em}
+pre{background:var(--code);padding:12px 14px;border-radius:10px;overflow-x:auto;font-size:.82rem;line-height:1.6}
+
+.hud{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:2px dashed var(--line);margin-bottom:14px;flex-wrap:wrap}
+.hud .title{font-weight:800;font-size:1.05rem;flex:1;min-width:160px}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:99px;padding:3px 12px;font-weight:700;font-size:.9rem;white-space:nowrap}
+.chip.score{color:var(--accent)}
+.btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:10px 18px;font-weight:700;box-shadow:0 3px 0 rgba(0,0,0,.18);transition:transform .08s}
+.btn:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.18)}
+.btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:5px 12px;font-size:.85rem;border-radius:9px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+.hero{text-align:center;padding:18px 0 6px}
+.hero .big{font-size:3rem;line-height:1}
+.hero h1{margin:8px 0 4px;font-size:1.7rem}
+.hero p{color:var(--sub);margin:0}
+.map{display:grid;gap:12px;margin-top:20px}
+.stage{display:flex;align-items:center;gap:14px;background:var(--card);border:2px solid var(--line);border-radius:16px;padding:14px 16px;text-align:left;width:100%}
+.stage .emo{font-size:2rem;width:48px;text-align:center}
+.stage .info{flex:1}
+.stage .info b{display:block;font-size:1.05rem}
+.stage .info small{color:var(--sub)}
+.stage .st{font-size:1.1rem;letter-spacing:2px;color:var(--gold)}
+.stage.locked{opacity:.55;cursor:not-allowed}
+.stage.locked .emo{filter:grayscale(1)}
+.stage.next{border-color:var(--accent);animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(226,115,28,.35)}50%{box-shadow:0 0 0 7px rgba(226,115,28,0)}}
+.badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;justify-content:center}
+.badge{background:var(--soft);border-radius:99px;padding:3px 12px;font-size:.85rem;font-weight:700}
+.badge.off{opacity:.35}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px 20px;margin:14px 0}
+.story{display:flex;gap:12px;align-items:flex-start}
+.story .who{font-size:2.2rem;line-height:1}
+.story .bubble{background:var(--soft);border-radius:4px 16px 16px 16px;padding:10px 14px;flex:1}
+h2{margin:6px 0 2px;font-size:1.45rem}
+h3{margin:18px 0 6px;font-size:1.05rem}
+.progress{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin:6px 0 2px}
+.progress i{display:block;height:100%;background:var(--accent);transition:width .4s}
+table{width:100%;border-collapse:collapse;font-size:.9rem;margin:8px 0}
+th,td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:left;vertical-align:top}
+th{color:var(--sub)}
+.tw{overflow-x:auto}
+.tip{background:var(--soft);border-radius:12px;padding:10px 14px;margin:10px 0;font-size:.95rem}
+.flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0}
+.flow span{background:var(--code);border-radius:8px;padding:5px 9px;font-size:.85rem}
+.flow em{font-style:normal;color:var(--sub);font-weight:700}
+
+.mission-tag{display:inline-block;background:var(--accent);color:#fff;font-weight:800;font-size:.8rem;border-radius:6px;padding:2px 9px;margin-bottom:6px}
+.q{font-weight:700;font-size:1.05rem;margin:4px 0 12px}
+.opts{display:grid;gap:8px}
+.opt{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:10px 14px;text-align:left;transition:border-color .15s,background .15s}
+.opt:hover:not(:disabled){border-color:var(--accent)}
+.opt.right{border-color:var(--ok);background:var(--ok-soft)}
+.opt.wrong{border-color:var(--bad);background:var(--bad-soft);animation:shake .35s}
+.opt.sel{border-color:var(--accent2);background:var(--soft)}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.fb{margin-top:12px;border-radius:12px;padding:10px 14px;display:none}
+.fb.show{display:block}
+.fb.ok{background:var(--ok-soft)}
+.fb.no{background:var(--bad-soft)}
+.match{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.match .col{display:grid;gap:8px;align-content:start}
+.match .opt.done{opacity:.4;border-color:var(--ok)}
+.seg{display:flex;flex-wrap:wrap;gap:3px;font-family:ui-monospace,Consolas,monospace;font-size:.85rem;margin:8px 0}
+.seg button{border:2px solid var(--line);background:var(--code);border-radius:8px;padding:8px 8px}
+.seg button.right{border-color:var(--ok);background:var(--ok-soft)}
+.seg button.wrong{border-color:var(--bad);animation:shake .35s}
+.seg .sep{align-self:center;color:var(--sub)}
+.lines{display:grid;gap:4px;font-family:ui-monospace,Consolas,monospace;font-size:.8rem}
+.lines button{text-align:left;background:var(--code);border:2px solid transparent;border-radius:8px;padding:7px 10px;white-space:pre-wrap;word-break:break-all}
+.lines button.sel{border-color:var(--bad);background:var(--bad-soft)}
+.lines button.miss{border-color:var(--gold)}
+.lines button.right{border-color:var(--ok)}
+.order-pool,.order-done{display:flex;flex-wrap:wrap;gap:8px;min-height:44px}
+.order-done{background:var(--code);border-radius:12px;padding:8px;margin-bottom:10px}
+.order-done span{background:var(--ok-soft);border-radius:9px;padding:6px 10px;font-size:.9rem}
+.slot{margin:10px 0}
+.slot b{display:block;font-size:.9rem;color:var(--sub);margin-bottom:4px}
+.slot .opts{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.slot .opt{font-family:ui-monospace,Consolas,monospace;font-size:.8rem}
+.cmd{font-family:ui-monospace,Consolas,monospace;font-size:.82rem;background:var(--code);border-radius:10px;padding:10px 12px;margin-top:8px;overflow-x:auto;white-space:nowrap}
+.cmd i{font-style:normal;color:var(--accent);font-weight:700}
+
+/* 트래픽 시뮬레이터 */
+.sim-box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+.sim-canvas{width:100%;height:200px;border-radius:10px;background:var(--code);position:relative;overflow:hidden}
+.sim-dot{position:absolute;width:10px;height:10px;border-radius:50%;transition:left .3s,top .3s}
+.sim-ctrl{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+.sim-stat{font-weight:700;font-size:.9rem;margin-top:6px}
+
+.mtabs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.mtab{border:2px solid var(--line);background:var(--card);border-radius:10px;padding:4px 12px;font-weight:700;font-size:.88rem}
+.mtab.solved{border-color:var(--ok);background:var(--ok-soft)}
+.mtab.now{border-color:var(--accent);color:var(--accent)}
+.mtab.brief{margin-left:auto}
+
+.modal{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.45);display:flex;justify-content:center;align-items:flex-start;padding:24px 12px;overflow-y:auto}
+.modal .card{max-width:780px;width:100%;margin:0;position:relative}
+.modal .close{position:sticky;top:0;float:right}
+
+.clear{text-align:center;padding:28px 10px}
+.clear .medal{font-size:4.5rem;animation:pop .6s ease-out}
+@keyframes pop{0%{transform:scale(.2) rotate(-30deg);opacity:0}70%{transform:scale(1.2)}100%{transform:scale(1)}}
+.clear .stars{font-size:2rem;color:var(--gold);letter-spacing:6px}
+.confetti{position:fixed;top:-20px;font-size:1.4rem;pointer-events:none;animation:fall linear forwards;z-index:20}
+@keyframes fall{to{transform:translateY(110vh) rotate(540deg)}}
+.row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+.summary li{margin:6px 0}
+.foot{text-align:center;color:var(--sub);font-size:.85rem;margin-top:30px}
+.foot a{color:var(--accent2)}
+@media (max-width:560px){.match{grid-template-columns:1fr 1fr}.hero h1{font-size:1.4rem}}
+
+/* ───── 정리노트 ───── */
+.note{
+  --bg:#fbfaf7; --card:#ffffff; --ink:#1f2328; --sub:#5b636d; --line:#e4e1da;
+  --accent:#2f6fde; --accent-soft:#e8f0fd; --ok:#1f8a4c; --ok-soft:#e5f5ec;
+  --warn:#b4610b; --warn-soft:#fdf1e3; --bad:#c23a3a; --bad-soft:#fbe9e9;
+  --code:#f3f1ec;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .note{
+    --bg:#16181c; --card:#1e2127; --ink:#e7e9ec; --sub:#a0a8b3; --line:#30343c;
+    --accent:#7aa7ff; --accent-soft:#1f2b44; --ok:#5cc98a; --ok-soft:#1b3326;
+    --warn:#f0a95a; --warn-soft:#3a2c1b; --bad:#f07c7c; --bad-soft:#3a2020; --code:#262a31;
+  }}
+:root[data-theme="dark"] .note{
+  --bg:#16181c; --card:#1e2127; --ink:#e7e9ec; --sub:#a0a8b3; --line:#30343c;
+  --accent:#7aa7ff; --accent-soft:#1f2b44; --ok:#5cc98a; --ok-soft:#1b3326;
+  --warn:#f0a95a; --warn-soft:#3a2c1b; --bad:#f07c7c; --bad-soft:#3a2020; --code:#262a31;
+}
+.note *{box-sizing:border-box}
+.note{margin:0;color:var(--ink);font:16px/1.75 "Pretendard","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;word-break:keep-all}
+.note h1{font-size:1.9rem;line-height:1.3;margin:0 0 8px}
+.note h2{font-size:1.4rem;margin:56px 0 12px;padding-top:12px;border-top:2px solid var(--line)}
+.note h2 .no{color:var(--accent);margin-right:6px}
+.note h3{font-size:1.1rem;margin:28px 0 8px}
+.note p{margin:10px 0}
+.note .lead{color:var(--sub);font-size:1.05rem}
+.note code{background:var(--code);padding:1px 6px;border-radius:5px;font-family:ui-monospace,Consolas,monospace;font-size:.88em}
+.note pre{background:var(--code);padding:14px 16px;border-radius:10px;overflow-x:auto;font-size:.85rem;line-height:1.6;margin:12px 0}
+.note pre code{background:none;padding:0}
+.note .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:16px 0}
+.note .box{border-radius:12px;padding:14px 18px;margin:16px 0}
+.note .box.tip{background:var(--accent-soft)}
+.note .box.ok{background:var(--ok-soft)}
+.note .box.warn{background:var(--warn-soft)}
+.note .box.bad{background:var(--bad-soft)}
+.note .box b.t{display:block;margin-bottom:4px}
+.note table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.93rem}
+.note th,.note td{border-bottom:1px solid var(--line);padding:9px 8px;text-align:left;vertical-align:top}
+.note th{color:var(--sub);font-weight:600;background:var(--card)}
+.note .tw{overflow-x:auto}
+.note nav.toc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 20px;margin:24px 0}
+.note nav.toc ol{margin:6px 0;padding-left:22px}
+.note nav.toc a{color:var(--accent);text-decoration:none}
+.note .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:6px;margin:14px 0}
+.note .flow .s{flex:1 1 120px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center;font-size:.88rem}
+.note .flow .s b{display:block;font-size:.95rem}
+.note .flow .s small{color:var(--sub)}
+.note .flow .a{align-self:center;color:var(--sub);font-weight:700}
+.note .flow.good .s{border-color:var(--ok)}
+.note .flow.old .s{border-style:dashed}
+.note .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:640px){.note .two{grid-template-columns:1fr}}
+.note details{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:10px 0}
+.note details summary{cursor:pointer;font-weight:600}
+.note details[open] summary{margin-bottom:6px}
+.note .pill{display:inline-block;font-size:.75rem;padding:1px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-weight:600;vertical-align:middle}
+.note ul.check{list-style:none;padding-left:0}
+.note ul.check li::before{content:"✔ ";color:var(--ok);font-weight:700}
+.note .big{font-size:1.15rem;font-weight:700}
+.note h1{margin-top:14px}
+.note h2{scroll-margin-top:80px}
+</style>
+</head>
+<body>
+<main id="app"></main>
+
+<template id="noteTpl">
+
+<h1>Cloud Run으로 무중단 배포하기 — 쉽게 정리한 노트</h1>
+<p class="lead">AI 서비스 인 프로덕션 · 9강 · 모두의연구소 교안을 처음 보는 사람도 이해할 수 있게 비유와 그림으로 다시 정리했습니다.</p>
+
+<div class="box tip">
+<b class="t">오늘 수업을 한 문장으로</b>
+<span class="big">"Cloud Run이 로드밸런서 역할을 대신하고, 리비전·태그·트래픽 설정만으로 무중단 배포·롤백·카나리를 할 수 있다."</span><br>
+스타트업 프로브를 <b>/health</b>로 바꾸고, <b>0% 배포 + 태그 URL</b>로 미리 확인한 뒤, <b>워크플로</b>로 자동화합니다.
+</div>
+
+<nav class="toc">
+<b>목차</b>
+<ol>
+<li><a href="#s1">Cloud Run이 맡는 것과 내가 정하는 것</a></li>
+<li><a href="#s2">스타트업 프로브</a></li>
+<li><a href="#s3">태그 URL과 블루그린/카나리</a></li>
+<li><a href="#s4">트래픽 고정</a></li>
+<li><a href="#s5">Supabase 연결과 무상태</a></li>
+<li><a href="#s6">자동 배포 파이프라인</a></li>
+<li><a href="#s7">롤백 신호와 배포 방식 선택</a></li>
+<li><a href="#s8">한 장 요약</a></li>
+</ol>
+</nav>
+
+<!-- 1 -->
+<h2 id="s1"><span class="no">1</span>Cloud Run이 맡는 것과 내가 정하는 것</h2>
+<p>8강에서 직접 만든 Nginx + Docker 블루그린을 Cloud Run이 대신합니다. Cloud Run은 <b>로드밸런서 역할</b>을 내장하고 있어요.</p>
+
+<h3>리비전(revision)이란?</h3>
+<p><b>리비전 = 이미지 + 환경변수 + 설정</b>이 한 묶음. 배포할 때마다 새 리비전이 만들어지고, Cloud Run은 이 리비전들 사이에서 <b>트래픽 설정</b>으로 요청을 나눕니다.</p>
+
+<h3>기본 배포 순서</h3>
+<div class="tw"><table>
+<tr><th>순서</th><th>하는 일</th><th>설명</th></tr>
+<tr><td>1</td><td><b>새 인스턴스 켜기</b></td><td>새 리비전의 컨테이너를 시작</td></tr>
+<tr><td>2</td><td><b>스타트업 프로브 통과</b></td><td>기본값: 포트가 열렸는지만 확인</td></tr>
+<tr><td>3</td><td><b>트래픽 100% 옮기기</b></td><td>새 리비전으로 모든 요청 전환</td></tr>
+<tr><td>4</td><td><b>이전 인스턴스에 SIGTERM</b></td><td>종료 신호 보냄</td></tr>
+<tr><td>5</td><td><b>10초 그레이스풀 셧다운</b></td><td>처리 중이던 요청을 마침</td></tr>
+</table></div>
+
+<div class="box tip">💡 8강에서 직접 한 것(upstream 바꾸기, reload, 헬스체크, 그레이스풀 셧다운)을 Cloud Run이 <b>자동으로</b> 해 줍니다. 대신 <b>어떤 조건으로 준비 완료로 볼 것인지</b>는 내가 정해야 해요.</div>
+
+<!-- 2 -->
+<h2 id="s2"><span class="no">2</span>스타트업 프로브</h2>
+<p>기본 프로브는 <b>포트가 열렸는지만</b> 봅니다. 앱이 모델을 로딩하는 중이어도 포트만 열리면 "준비 완료"로 판단해서 트래픽을 옮깁니다.</p>
+
+<h3>실험 결과</h3>
+<div class="tw"><table>
+<tr><th></th><th>기본 프로브 (포트 열림)</th><th>/health 프로브</th></tr>
+<tr><td>SLOW_START_SECONDS=5</td><td>실패 <b>여러 건</b></td><td>실패 <b>0건</b></td></tr>
+<tr><td>배포 시간</td><td>빠름</td><td>약 <b>30초 느림</b></td></tr>
+<tr><td>사용자 경험</td><td>503 에러 발생</td><td>오류 <b>0건</b></td></tr>
+</table></div>
+
+<div class="box ok"><b class="t">/health 프로브 설정</b>
+5초마다 <code>/health</code>를 물어보고, 12번(60초)까지 기다립니다. 배포는 30초 느려지지만 사용자는 오류를 한 번도 보지 않습니다.</div>
+
+<pre><code>startupProbe:
+  httpGet:
+    path: /health
+  periodSeconds: 5
+  failureThreshold: 12    # 5초 × 12번 = 60초까지 대기</code></pre>
+
+<!-- 3 -->
+<h2 id="s3"><span class="no">3</span>태그 URL과 블루그린/카나리</h2>
+
+<h3>0% 배포와 태그</h3>
+<p><code>--no-traffic</code>으로 배포하면 새 리비전이 만들어지지만 <b>트래픽 0%</b>. <code>--tag green</code>을 붙이면 별도의 <b>태그 URL</b>이 생깁니다.</p>
+<pre><code>태그 URL: https://green---서비스명.run.app</code></pre>
+<p>태그 URL은 트래픽 설정과 무관하게 <b>그 리비전에만 직접 접근</b>할 수 있습니다.</p>
+
+<h3>블루그린/카나리 명령 비교</h3>
+<div class="tw"><table>
+<tr><th>방식</th><th>명령</th><th>설명</th></tr>
+<tr><td><b>블루그린</b></td><td><code>update-traffic --to-tags green=100</code></td><td>한 번에 100% 전환</td></tr>
+<tr><td><b>카나리</b></td><td><code>update-traffic --to-tags green=10</code></td><td>10%만 먼저 보내기</td></tr>
+<tr><td><b>롤백</b></td><td><code>update-traffic --to-revisions &lt;이전>=100</code></td><td>이전 리비전으로 되돌리기</td></tr>
+<tr><td><b>고정 해제</b></td><td><code>update-traffic --to-latest</code></td><td>최신 리비전이 항상 트래픽 받기</td></tr>
+</table></div>
+
+<div class="box warn"><b class="t">블루그린 전환 흐름</b>
+① 지금 트래픽 받는 리비전 확인 → ② 0% 배포 + green 태그 → ③ 태그 URL로 새 리비전 확인 → ④ 트래픽 100% green → ⑤ --to-latest로 고정 해제</div>
+
+<!-- 4 -->
+<h2 id="s4"><span class="no">4</span>트래픽 고정</h2>
+<p>롤백이나 카나리를 <b>한 번이라도</b> 하면 트래픽이 특정 리비전에 <b>고정</b>됩니다.</p>
+
+<h3>증상</h3>
+<ul>
+<li>새 배포가 성공(초록 표시)인데 사용자는 이전 버전을 봄</li>
+<li><code>/version</code>이 옛 리비전을 응답</li>
+<li>새 리비전이 0% 트래픽으로 남아 있음</li>
+</ul>
+
+<h3>해결</h3>
+<pre><code>gcloud run services update-traffic 서비스명 --to-latest</code></pre>
+<div class="box bad"><b class="t">고정되는 조건</b>
+<code>--to-revisions</code>나 <code>--to-tags</code>로 특정 리비전에 트래픽을 지정하면 고정. 이후 새 배포는 0%로 남음. <b>반드시 --to-latest로 해제!</b></div>
+
+<!-- 5 -->
+<h2 id="s5"><span class="no">5</span>Supabase 연결과 무상태</h2>
+<p>인스턴스 메모리에 데이터를 두면 리비전이 바뀔 때 사라집니다. <b>Supabase</b>로 옮기면 어느 리비전이든 같은 데이터.</p>
+
+<h3>키를 넣는 곳</h3>
+<div class="tw"><table>
+<tr><th>값</th><th>넣는 곳</th><th>이유</th></tr>
+<tr><td>📎 프로젝트 URL</td><td>환경변수 (<code>--update-env-vars</code>)</td><td>공개 가능</td></tr>
+<tr><td>🔑 publishable key</td><td>환경변수</td><td>브라우저가 로그인에 사용, RLS가 보호</td></tr>
+<tr><td>🔒 secret key</td><td><b>Secret Manager</b> (<code>--update-secrets</code>)</td><td>RLS를 건너뛰어 모든 데이터에 접근 가능</td></tr>
+<tr><td>🔧 STORAGE=supabase</td><td>환경변수</td><td>저장소 전환 스위치</td></tr>
+</table></div>
+
+<div class="box warn"><b class="t">같은 런타임 서비스 계정의 한계</b>
+staging과 production이 같은 서비스 계정이면 staging에서 production의 secret key를 읽을 수 있습니다. <b>환경별 서비스 계정 분리</b>가 실무 권장사항!</div>
+
+<!-- 6 -->
+<h2 id="s6"><span class="no">6</span>자동 배포 파이프라인</h2>
+
+<h3>deploy.yml 구조</h3>
+<div class="flow good">
+<div class="s"><b>이미지 빌드 & 푸시</b><small>Artifact Registry</small></div><div class="a">→</div>
+<div class="s"><b>0% 배포 + 태그</b><small>--no-traffic --tag green</small></div><div class="a">→</div>
+<div class="s"><b>스모크 테스트</b><small>태그 URL /health + /version</small></div><div class="a">→</div>
+<div class="s"><b>트래픽 100% 전환</b><small>--to-tags green=100</small></div>
+</div>
+
+<h3>스모크 테스트</h3>
+<p><b>서비스 주소가 아닌 태그 URL</b>로 테스트합니다. 0% 배포 상태에서 서비스 주소는 이전 리비전이 답하므로, 새 리비전을 확인하려면 태그 URL만 가능!</p>
+<ul>
+<li><code>/health</code> — 서비스가 살아 있는지</li>
+<li><code>/version</code> — 커밋 해시가 이번 배포와 일치하는지</li>
+<li>실패 시 → 워크플로 실패 (전환하지 않음)</li>
+</ul>
+
+<h3>rollback.yml</h3>
+<p><code>workflow_dispatch</code>로 원클릭 롤백. 이전 리비전 이름을 입력하면 <code>--to-revisions</code>로 트래픽 전환.</p>
+
+<!-- 7 -->
+<h2 id="s7"><span class="no">7</span>롤백 신호와 배포 방식 선택</h2>
+
+<h3>5가지 롤백 신호</h3>
+<div class="tw"><table>
+<tr><th>신호</th><th>보는 곳</th><th>기준 예시</th></tr>
+<tr><td>HTTP 5xx 비율</td><td>Cloud Run 메트릭</td><td>5분 평균 > 1%</td></tr>
+<tr><td>지연 시간 (p95)</td><td>Cloud Run 메트릭</td><td>p95 > 이전 리비전의 2배</td></tr>
+<tr><td>에러 로그</td><td>Cloud Logging</td><td>ERROR 로그 급증</td></tr>
+<tr><td>스모크 테스트 실패</td><td>CI/CD 워크플로</td><td>/health 또는 /version 불일치</td></tr>
+<tr><td>사용자 신고</td><td>모니터링 채널</td><td>같은 증상 2건 이상</td></tr>
+</table></div>
+
+<div class="box tip">💡 <b>지연 시간을 평균 대신 p95로</b> 보는 이유: 평균은 일부 요청이 아주 느려진 것을 놓칩니다. p95는 100개 중 95번째로 빠른 값으로, 느린 쪽 5%의 사용자 경험을 잡아냅니다.</div>
+
+<h3>배포 방식 선택 기준</h3>
+<div class="tw"><table>
+<tr><th>상황</th><th>추천 방식</th><th>이유</th></tr>
+<tr><td>요청이 적은 서비스 (하루 30건)</td><td><b>블루그린</b></td><td>카나리 10%에 요청이 거의 안 감</td></tr>
+<tr><td>요청이 많고 모니터링 잘 됨</td><td><b>카나리</b></td><td>일부만 먼저 보내 위험 최소화</td></tr>
+<tr><td>빠른 롤백이 최우선</td><td><b>블루그린</b></td><td>트래픽 설정만 바꾸면 됨</td></tr>
+<tr><td>DB 스키마 변경 포함</td><td><b>블루그린 + 확장-축소</b></td><td>두 리비전이 같은 DB를 함께 씀</td></tr>
+</table></div>
+
+<!-- 8 -->
+<h2 id="s8"><span class="no">8</span>한 장 요약</h2>
+
+<div class="card">
+<ul class="check">
+<li><b>Cloud Run이 로드밸런서 역할</b>: 리비전 사이 트래픽 설정으로 요청을 나눔</li>
+<li><b>스타트업 프로브를 /health로</b> 바꾸면 준비가 늦은 버전도 실패 0건</li>
+<li><b>태그 URL</b>로 0%인 새 리비전을 사용자 영향 없이 확인 가능</li>
+<li><b>롤백은 트래픽 설정만</b> 바꾸므로 몇 초 만에 완료</li>
+<li><b>트래픽 고정</b>: 롤백/카나리 후 --to-latest로 풀어야 새 배포가 트래픽을 받음</li>
+<li><b>secret key는 Secret Manager</b>에, publishable key는 환경변수로</li>
+<li><b>0% 배포→스모크 테스트→전환</b>을 워크플로로 자동화, 실패 시 전환 차단</li>
+<li><b>무중단 = 요청 확인 스크립트의 실패 0건</b>으로 증명</li>
+</ul>
+</div>
+
+<h3>아직 남은 숙제</h3>
+<ul>
+<li>답변 품질 모니터링은 /health와 /version만으로 불가</li>
+<li>스키마 변경이 있는 배포는 아직 미시험</li>
+<li>staging/production 런타임 서비스 계정이 같아 권한 분리 미흡</li>
+<li>카나리 자동 승격은 도전 과제</li>
+</ul>
+
+</template>
+
+<script>
+// ───────── 스테이지 데이터 ─────────
+const STAGES = [
+{
+  id:'revision', emo:'☁️', title:'리비전과 트래픽', sub:'Cloud Run의 로드밸런서 역할', badge:'📦 리비전 관리자',
+  brief:`
+  <div class="story"><div class="who">☁️</div><div class="bubble">Cloud Run은 로드밸런서를 <b>내장</b>하고 있어요! 8강에서 Nginx로 직접 한 것을 Cloud Run이 자동으로 해 줍니다.</div></div>
+  <p><b>리비전(revision)</b> = 이미지 + 환경변수 + 설정이 한 묶음. 배포할 때마다 새 리비전이 만들어지고, Cloud Run은 <b>트래픽 설정</b>으로 요청을 나눕니다.</p>
+  <h3>기본 배포 순서</h3>
+  <div class="tw"><table>
+   <tr><th>순서</th><th>하는 일</th></tr>
+   <tr><td>1</td><td>새 인스턴스 켜기</td></tr>
+   <tr><td>2</td><td>스타트업 프로브 통과 (기본: 포트 열림)</td></tr>
+   <tr><td>3</td><td>트래픽 100% 옮기기</td></tr>
+   <tr><td>4</td><td>이전 인스턴스에 SIGTERM</td></tr>
+   <tr><td>5</td><td>10초 그레이스풀 셧다운</td></tr>
+  </table></div>
+  <div class="tip">💡 8강의 upstream 바꾸기 + reload + 헬스체크 + 그레이스풀 셧다운을 Cloud Run이 자동으로! 대신 <b>준비 조건</b>은 내가 정해야 해요.</div>`,
+  missions:[
+    {type:'quiz', q:'Cloud Run 기본 배포에서 새 리비전으로 트래픽이 옮겨 가는 기준은?', opts:[
+      '인스턴스가 켜지면 바로',
+      '스타트업 프로브를 통과하면',
+      '10초가 지나면',
+      '관리자가 승인하면'], a:1,
+      ex:'스타트업 프로브를 통과해야 트래픽이 옮겨 갑니다. 기본값은 포트가 열렸는지만 봅니다.'},
+    {type:'quiz', q:'리비전(revision)이란?', opts:[
+      '서비스의 도메인 이름',
+      '배포할 때마다 만들어지는 이미지와 설정의 한 벌',
+      '컨테이너의 로그 기록',
+      'GitHub의 커밋 해시'], a:1,
+      ex:'리비전은 이미지+환경변수+설정이 한 묶음. Cloud Run은 이 리비전들 사이에서 트래픽을 나눕니다.'},
+    {type:'quiz', q:'이전 인스턴스에 SIGTERM 보낸 뒤 기다리는 시간은?', opts:[
+      '1초',
+      '5초',
+      '10초',
+      '60초'], a:2,
+      ex:'10초 동안 처리 중이던 요청을 마치는 것이 그레이스풀 셧다운입니다.'}
+  ]
+},
+{
+  id:'probe', emo:'🏥', title:'스타트업 프로브', sub:'준비됐는지 확인하는 검사', badge:'🩺 프로브 전문의',
+  brief:`
+  <div class="story"><div class="who">🏥</div><div class="bubble">기본 프로브는 <b>포트 열림</b>만 봐요. 앱이 모델을 로딩하는 중이어도 "준비 완료"로 판단해서 트래픽을 옮기면… <b>503 에러!</b></div></div>
+  <h3>실험 결과</h3>
+  <div class="tw"><table>
+   <tr><th></th><th>기본 프로브</th><th>/health 프로브</th></tr>
+   <tr><td>실패 수</td><td><b>여러 건</b> 😢</td><td><b>0건</b> 🎉</td></tr>
+   <tr><td>배포 시간</td><td>빠름</td><td>약 30초 느림</td></tr>
+  </table></div>
+  <div class="tip">🩺 <code>/health</code>로 바꾸면: 앱이 진짜 준비될 때까지 이전 리비전이 트래픽을 받으므로 <b>사용자는 오류를 한 번도 보지 않습니다!</b></div>`,
+  missions:[
+    {type:'quiz', q:'기본 스타트업 프로브가 확인하는 것은?', opts:[
+      '/health 응답',
+      '컨테이너의 포트가 열렸는지',
+      'CPU 사용률',
+      '메모리 사용량'], a:1,
+      ex:'기본값은 포트만 봐서 앱이 모델을 로딩하는 중이어도 준비 완료로 판단합니다.'},
+    {type:'quiz', q:'스타트업 프로브를 /health로 바꿨을 때 달라지는 것은?', opts:[
+      '배포가 더 빨라진다',
+      '준비 완료 전까지 트래픽이 이전 리비전에 남아 실패 0건',
+      '인스턴스 수가 줄어든다',
+      '그레이스풀 셧다운 시간이 늘어난다'], a:1,
+      ex:'배포는 30초 느려지지만 사용자는 오류를 한 번도 보지 않습니다.'},
+    {type:'build', q:'스타트업 프로브 설정을 조립하라!', slots:[
+      {label:'확인 경로', opts:['/health','/version','/ready'], a:0},
+      {label:'확인 간격', opts:['1초마다','5초마다','30초마다'], a:1},
+      {label:'최대 실패 허용', opts:['3번 (15초)','12번 (60초)','60번 (300초)'], a:1}
+    ], ex:'5초마다 /health를 물어보고 12번(60초)까지 기다립니다.'}
+  ]
+},
+{
+  id:'bluegreen', emo:'🏷️', title:'태그 URL과 블루그린', sub:'0% 배포와 태그로 미리 확인', badge:'🔖 태그 마스터',
+  brief:`
+  <div class="story"><div class="who">🏷️</div><div class="bubble"><code>--no-traffic</code>으로 배포하면 트래픽 0%! <code>--tag green</code>을 붙이면 별도의 <b>태그 URL</b>이 생겨요.</div></div>
+  <pre>태그 URL: https://green---서비스명.run.app</pre>
+  <p>태그 URL은 트래픽 설정과 <b>상관없이</b> 그 리비전에만 접근 가능합니다. 사용자에게 영향 없이 새 리비전을 미리 확인!</p>
+  <h3>블루그린 전환 흐름</h3>
+  <div class="flow"><span>① 현재 리비전 확인</span><em>→</em><span>② 0% 배포 + 태그</span><em>→</em><span>③ 태그 URL로 확인</span><em>→</em><span>④ 100% 전환</span><em>→</em><span>⑤ --to-latest 해제</span></div>
+  <div class="tip">🔖 롤백도 트래픽 설정만 바꾸면 <b>몇 초 만에</b> 완료!</div>`,
+  missions:[
+    {type:'match', q:'gcloud 명령과 하는 일을 짝지어라!', pairs:[
+      ['--no-traffic','트래픽 0%로 배포'],
+      ['--tag green','태그 URL 생성'],
+      ['update-traffic --to-tags green=100','블루그린 전환'],
+      ['update-traffic --to-revisions <리비전>=100','롤백']]},
+    {type:'quiz', q:'태그 URL의 특징으로 맞는 것은?', opts:[
+      '트래픽이 0%이면 접근 불가',
+      '트래픽 설정과 상관없이 그 리비전에만 접근 가능',
+      '관리자만 접근 가능',
+      '24시간 후 만료된다'], a:1,
+      ex:'태그 URL은 별도 주소라 트래픽 0%여도 열어볼 수 있습니다.'},
+    {type:'order', q:'블루그린 전환 순서를 맞춰라!', items:[
+      '① 지금 트래픽 받는 리비전 확인',
+      '② 0% 배포 + green 태그 붙이기',
+      '③ 태그 URL로 새 리비전 확인',
+      '④ 트래픽 100% green으로 전환',
+      '⑤ --to-latest로 트래픽 고정 해제']}
+  ]
+},
+{
+  id:'pinning', emo:'📌', title:'트래픽 고정의 함정', sub:'배포 성공인데 사용자는 이전 버전?', badge:'⚠️ 고정 해제사',
+  brief:`
+  <div class="story"><div class="who">📌</div><div class="bubble">롤백이나 카나리를 한 번이라도 하면 트래픽이 특정 리비전에 <b>고정</b>돼요. 새 배포해도 0%로 남아서 "배포는 초록인데 사용자는 이전 버전"!</div></div>
+  <h3>트래픽 고정의 증상</h3>
+  <ul>
+   <li>배포 성공(초록 체크)인데 <code>/version</code>이 이전 리비전 응답</li>
+   <li>새 리비전이 콘솔에서 0% 트래픽으로 보임</li>
+   <li>버그를 고쳤는데 사용자에겐 아직 이전 버전</li>
+  </ul>
+  <div class="tip">🔑 해결: <code>gcloud run services update-traffic 서비스명 --to-latest</code><br>최신 리비전이 항상 트래픽을 받게 합니다!</div>`,
+  missions:[
+    {type:'quiz', q:'카나리 중 롤백했다. 다음 날 버그 고친 PR 머지→배포 성공인데 /version이 이전 리비전. 이유는?', opts:[
+      '배포가 이미지를 못 만들었다',
+      '롤백할 때 트래픽이 고정되어 새 리비전은 0%로 남았다',
+      '스타트업 프로브 실패로 리비전이 삭제됐다',
+      '태그 URL이 서비스 주소를 대신하고 있다'], a:1,
+      ex:'롤백하면 트래픽이 특정 리비전에 고정됩니다. --to-latest로 풀어야 합니다.'},
+    {type:'quiz', q:'트래픽 고정을 푸는 명령은?', opts:[
+      'gcloud run services delete',
+      'gcloud run services update-traffic --to-latest',
+      'gcloud run deploy --force',
+      'gcloud run services restart'], a:1,
+      ex:'--to-latest는 가장 최근 리비전이 트래픽을 받게 합니다.'},
+    {type:'sim', q:'🔄 트래픽 고정 시뮬레이터! 배포하고 고정을 확인한 뒤 풀어 보세요.'}
+  ]
+},
+{
+  id:'stateless', emo:'💾', title:'Supabase 연결과 무상태', sub:'리비전이 바뀌어도 데이터가 남게', badge:'🗄️ 무상태 달인',
+  brief:`
+  <div class="story"><div class="who">💾</div><div class="bubble">인스턴스 메모리에 데이터를 두면 리비전이 바뀔 때 <b>사라져요!</b> Supabase로 옮기면 어느 리비전이든 같은 데이터를 봅니다.</div></div>
+  <h3>키를 넣는 곳</h3>
+  <div class="tw"><table>
+   <tr><th>값</th><th>넣는 곳</th></tr>
+   <tr><td>📎 프로젝트 URL</td><td>환경변수</td></tr>
+   <tr><td>🔑 publishable key</td><td>환경변수 (브라우저가 로그인에 씀)</td></tr>
+   <tr><td>🔒 secret key</td><td><b>Secret Manager</b> (RLS 건너뜀!)</td></tr>
+   <tr><td>🔧 STORAGE=supabase</td><td>환경변수 (저장소 전환)</td></tr>
+  </table></div>
+  <div class="tip">⚠️ staging과 production이 같은 서비스 계정이면 staging에서 production secret key를 읽을 수 있어요. <b>환경별 서비스 계정 분리</b>가 실무 권장!</div>`,
+  missions:[
+    {type:'quiz', q:'secret key만 Secret Manager에 넣는 이유?', opts:[
+      '더 길어서 환경변수에 안 들어감',
+      'RLS를 건너뛰어 모든 사용자 데이터에 접근 가능하므로',
+      '매일 바뀌어서',
+      '하나만 넣을 수 있어서'], a:1,
+      ex:'secret key는 RLS를 건너뛰므로 서버에서만, 시크릿으로만!'},
+    {type:'quiz', q:'같은 런타임 서비스 계정의 한계?', opts:[
+      '배포가 느려진다',
+      'staging에서 production secret key를 읽을 수 있다',
+      '인스턴스 수가 제한된다',
+      '로그를 볼 수 없다'], a:1,
+      ex:'환경별 서비스 계정 분리가 실무 권장사항입니다.'},
+    {type:'match', q:'값과 넣는 곳을 짝지어라!', pairs:[
+      ['📎 프로젝트 URL','환경변수 (--update-env-vars)'],
+      ['🔑 publishable key','환경변수 (브라우저가 로그인에 씀)'],
+      ['🔒 secret key','Secret Manager (--update-secrets)'],
+      ['🔧 STORAGE=supabase','환경변수 (저장소 전환 스위치)']]}
+  ]
+},
+{
+  id:'pipeline', emo:'🔄', title:'자동화 파이프라인', sub:'머지 한 번으로 무중단 배포', badge:'🤖 자동화 설계사',
+  brief:`
+  <div class="story"><div class="who">🔄</div><div class="bubble">deploy.yml 하나로 머지만 하면 무중단 배포! 이미지 빌드 → 0% 배포 + 태그 → 스모크 테스트 → 전환.</div></div>
+  <h3>자동 배포 흐름</h3>
+  <div class="flow"><span>① 이미지 빌드 & 푸시</span><em>→</em><span>② 0% 배포 + 태그</span><em>→</em><span>③ 스모크 테스트 (태그 URL)</span><em>→</em><span>④ 트래픽 100% 전환</span></div>
+  <h3>스모크 테스트</h3>
+  <ul>
+   <li><b>태그 URL</b>로 <code>/health</code> + <code>/version</code>(커밋 일치) 확인</li>
+   <li>서비스 주소가 아닌 이유: 0%인 새 리비전은 서비스 주소로 안 감</li>
+   <li>실패 시 → 워크플로 실패 → <b>전환 안 함</b></li>
+  </ul>
+  <div class="tip">🛡️ rollback.yml + <code>workflow_dispatch</code>로 원클릭 롤백도 자동화!</div>`,
+  missions:[
+    {type:'order', q:'자동 배포 파이프라인 순서!', items:[
+      '① 이미지 빌드 & 푸시',
+      '② 0% 배포 + 태그 붙이기',
+      '③ 스모크 테스트 (태그 URL)',
+      '④ 트래픽 100% 전환']},
+    {type:'build', q:'스모크 테스트 구성을 조립하라!', slots:[
+      {label:'확인 대상', opts:['서비스 주소','태그 URL','콘솔 화면'], a:1},
+      {label:'확인 내용', opts:['/health만','/health + /version 커밋 일치','/version만'], a:1},
+      {label:'실패 시', opts:['무시하고 전환','워크플로 실패 (전환 안 함)','5분 대기 후 재시도'], a:1}
+    ], ex:'태그 URL로 /health와 /version을 확인하고, 실패하면 전환하지 않습니다.'},
+    {type:'quiz', q:'스모크 테스트를 서비스 주소가 아닌 태그 URL로 하는 이유?', opts:[
+      '서비스 주소는 느려서',
+      '서비스 주소는 이전 리비전이 답하므로 새 리비전을 확인할 수 없다',
+      '태그 URL이 더 안전해서',
+      '서비스 주소는 HTTPS가 아니라서'], a:1,
+      ex:'0% 배포 상태에서 서비스 주소는 이전 리비전이 답합니다. 태그 URL만이 새 리비전을 봅니다.'}
+  ]
+},
+{
+  id:'final', emo:'🏆', title:'종합 점검', sub:'오늘 배운 모든 것을 종합', badge:'🎓 Cloud Run 배포 졸업생',
+  brief:`
+  <div class="story"><div class="who">🏆</div><div class="bubble">마지막 관문! 오늘 배운 리비전, 프로브, 태그 URL, 트래픽 고정, 무상태, 자동화를 모두 종합하는 퀴즈예요.</div></div>
+  <h3>오늘 배운 것 정리</h3>
+  <ul>
+   <li><b>Cloud Run = 로드밸런서 내장</b>: 리비전 사이에서 트래픽 설정으로 요청 분배</li>
+   <li><b>스타트업 프로브</b>: /health로 바꾸면 준비 안 된 리비전에 트래픽이 안 감</li>
+   <li><b>태그 URL</b>: 0% 배포 + 태그로 사용자 영향 없이 새 리비전 확인</li>
+   <li><b>트래픽 고정</b>: 롤백/카나리 후 반드시 --to-latest로 해제</li>
+   <li><b>무상태 + Secret Manager</b>: 키를 안전하게, 데이터를 밖에</li>
+   <li><b>자동화</b>: 0% 배포→스모크 테스트→전환을 워크플로로</li>
+  </ul>`,
+  missions:[
+    {type:'quiz', q:'배포 명령이 성공으로 끝난 것의 의미는?', opts:[
+      '사용자가 오류를 보지 않았다',
+      'Cloud Run의 준비 조건을 통과했을 뿐, 사용자 오류 없음을 뜻하지 않는다',
+      '새 리비전이 100% 트래픽을 받는다',
+      '이전 리비전이 삭제되었다'], a:1,
+      ex:'배포 성공은 준비 조건 통과일 뿐. 사용자 오류는 따로 측정해야!'},
+    {type:'quiz', q:'하루 요청 30건인 서비스에 카나리 10%에서 10분 머무는 기준의 문제?', opts:[
+      '10분이 너무 길다',
+      '새 리비전이 받는 요청이 거의 없어 실패 0건이 증거가 안 된다',
+      '카나리는 명령이 실행 안 된다',
+      '지연 시간만 봐야 한다'], a:1,
+      ex:'요청이 적은 서비스에는 블루그린이 적합합니다.'},
+    {type:'quiz', q:'롤백 신호에서 지연 시간을 평균 대신 p95로 보는 이유?', opts:[
+      'p95가 계산하기 쉬워서',
+      '평균만 보면 일부 요청이 아주 느려진 것을 놓치므로',
+      'p95가 항상 더 작으므로',
+      'Cloud Run이 p95만 제공해서'], a:1,
+      ex:'p95는 100개 중 95번째로 빠른 값. 느린 쪽 5%의 사용자 경험을 잡아냅니다.'},
+    {type:'quiz', q:'오늘 만든 배포 흐름에서 아직 해결하지 못한 것은?', opts:[
+      '전환 시 요청 끊김',
+      '답변 품질 모니터링과 스키마 변경 배포',
+      'Supabase 연결',
+      '0% 배포'], a:1,
+      ex:'/health는 서비스가 살았는지만 알고 답변이 이상한지는 모릅니다.'}
+  ]
+}
+];
+
+// ───────── 상태 저장 ─────────
+const KEY='cloud-run-deploy-mission-v1';
+let S={done:{},score:0};
+try{const raw=localStorage.getItem(KEY); if(raw) S=JSON.parse(raw);}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+
+const app=document.getElementById('app');
+let cur=null;
+
+function unlockedIdx(){let i=0; while(i<STAGES.length && S.done[STAGES[i].id]) i++; return i;}
+function stars(n){return '★'.repeat(n)+'☆'.repeat(3-n);}
+function hud(extra=''){
+  const n=Object.keys(S.done).length;
+  return `<div class="hud"><div class="title">☁️ Cloud Run 무중단 배포 미션</div>${extra}
+  <span class="chip">🔓 ${n} / ${STAGES.length}</span><span class="chip score">⭐ ${S.score}점</span></div>`;
+}
+
+// ───────── 맵 ─────────
+function showMap(){
+  stash(); cur=null;
+  const u=unlockedIdx();
+  let h=hud(`<button class="btn ghost small" onclick="showNote()">📖 정리노트</button><button class="btn ghost small" onclick="showShooter()">🔫 슈팅게임</button>`)+`<div class="hero"><div class="big">☁️🚀🔄</div><h1>Cloud Run으로 무중단 배포하기</h1>
+  <p>Cloud Run이 로드밸런서 역할! 7개 스테이지를 깨며 무중단 배포를 자동화해요.</p></div><div class="map">`;
+  STAGES.forEach((s,i)=>{
+    const d=S.done[s.id], locked=i>u;
+    h+=`<button class="stage ${locked?'locked':''} ${i===u?'next':''}" ${locked?'disabled':''} onclick="startStage(${i})">
+      <span class="emo">${locked?'🔒':s.emo}</span>
+      <span class="info"><b>STAGE ${i+1}. ${s.title}</b><small>${s.sub}</small></span>
+      <span class="st">${d?stars(d.stars):(locked?'':'▶')}</span></button>`;
+  });
+  h+=`</div><div class="badges">`+STAGES.map(s=>`<span class="badge ${S.done[s.id]?'':'off'}">${s.badge}</span>`).join('')+`</div>`;
+  if(u>=STAGES.length) h+=`<div class="row"><button class="btn" onclick="showFinal()">🏆 최종 결과 보기</button></div>`;
+  h+=`<p class="foot">진행 상황은 이 브라우저에 저장돼요 · <a href="#" onclick="resetAll();return false">처음부터 다시</a> · <a href="#" onclick="showNote();return false">📖 글로 된 정리노트</a></p>`;
+  app.innerHTML=h; scrollTo(0,0);
+}
+function resetAll(){ if(confirm('문제게임 + 슈팅게임 진행을 모두 지우고 처음부터 할까요?')){S={done:{},score:0};save();try{localStorage.removeItem('cloud-run-deploy-shooter-v1');}catch(e){}showMap();} }
+
+// ───────── 정리노트 ─────────
+function showNote(){
+  stash(); cur=null;
+  app.innerHTML=hud(`<button class="btn ghost small" onclick="showMap()">🧩 문제게임</button><button class="btn ghost small" onclick="showShooter()">🔫 슈팅게임</button>`)+
+    '<div class="note">'+document.getElementById('noteTpl').innerHTML+'</div>'+
+    `<div class="row"><button class="btn" onclick="showMap()">🧩 문제게임</button><button class="btn ghost" onclick="showShooter()">🔫 슈팅게임</button></div>`;
+  app.querySelectorAll('nav.toc a').forEach(a=>a.onclick=e=>{e.preventDefault();document.querySelector(a.getAttribute('href')).scrollIntoView({behavior:'smooth'});});
+  scrollTo(0,0);
+}
+
+// ───────── 슈팅게임 ─────────
+function showShooter(){
+  stash(); cur=null;
+  app.innerHTML=hud(`<button class="btn ghost small" onclick="showMap()">🧩 문제게임</button><button class="btn ghost small" onclick="showNote()">📖 정리노트</button>`)+
+    `<div style="text-align:center;margin:10px 0"><h2>🔫 Cloud Run 배포 슈팅 아카데미</h2><p style="color:var(--sub)">슈팅 게임으로 배우는 Cloud Run 무중단 배포!</p></div>`+
+    `<div style="border-radius:16px;overflow:hidden;border:2px solid var(--line);margin:10px 0"><iframe src="shooter.html" style="width:100%;height:700px;border:none"></iframe></div>`+
+    `<div class="row"><button class="btn" onclick="showMap()">🧩 문제게임으로</button><button class="btn ghost" onclick="showNote()">📖 정리노트</button></div>`;
+  scrollTo(0,0);
+}
+
+// ───────── 스테이지 ─────────
+function prog(){ const id=STAGES[cur.si].id; S.prog=S.prog||{}; return S.prog[id]=S.prog[id]||{}; }
+function firstUnsolved(){ const p=prog(), n=STAGES[cur.si].missions.length; for(let i=0;i<n;i++) if(!p[i]) return i; return -1; }
+
+const CACHE={};
+function stash(){
+  const mc=document.getElementById('mc');
+  if(!cur || !mc) return;
+  const id=STAGES[cur.si].id; (CACHE[id]=CACHE[id]||{})[cur.mi]={node:mc, solved:cur.solved};
+}
+
+function startStage(i, fresh){
+  stash();
+  cur={si:i,mi:0};
+  if(fresh){ delete CACHE[STAGES[i].id]; if(S.prog){ delete S.prog[STAGES[i].id]; save(); } }
+  const s=STAGES[i], solved=Object.keys(prog()).length;
+  const btns = solved
+    ? `<button class="btn" onclick="goMission(firstUnsolved())">이어서 하기 ▶ (${solved}/${s.missions.length} 완료)</button>
+       <button class="btn ghost" onclick="startStage(${i},true);goMission(0)">처음부터</button>`
+    : `<button class="btn" onclick="goMission(0)">미션 시작 ▶</button>`;
+  app.innerHTML=hud(`<button class="btn ghost small" onclick="showMap()">🗺️ 지도</button>`)+
+  `<div class="card"><small style="color:var(--sub)">STAGE ${i+1} · 브리핑</small><h2>${s.emo} ${s.title}</h2>${s.brief}
+   <div class="row">${btns}</div></div>`;
+  scrollTo(0,0);
+}
+function openBrief(){
+  const s=STAGES[cur.si], d=document.createElement('div');
+  d.className='modal'; d.onclick=e=>{ if(e.target===d) d.remove(); };
+  d.innerHTML=`<div class="card"><button class="btn small close" onclick="this.closest('.modal').remove()">✕ 닫고 미션으로</button>
+   <small style="color:var(--sub)">STAGE ${cur.si+1} · 브리핑</small><h2>${s.emo} ${s.title}</h2>${s.brief}
+   <div class="row"><button class="btn" onclick="this.closest('.modal').remove()">미션으로 돌아가기 ▶</button></div></div>`;
+  document.body.appendChild(d);
+}
+function goMission(mi){
+  const s=STAGES[cur.si];
+  if(mi<0) return stageClear();
+  stash();
+  cur.mi=mi; cur.solved=false;
+  const m=s.missions[mi], p=prog(), n=s.missions.length;
+  const pct=Math.round(Object.keys(p).length/n*100);
+  const tabs=s.missions.map((x,i)=>`<button class="mtab ${p[i]?'solved':''} ${i===mi?'now':''}" onclick="goMission(${i})">${p[i]?'✓':''} 미션 ${i+1}</button>`).join('');
+  app.innerHTML=hud(`<button class="btn ghost small" onclick="showMap()">🗺️ 지도</button>`)+
+   `<small style="color:var(--sub)">STAGE ${cur.si+1} ${s.title} · ${Object.keys(p).length}/${n} 완료</small>
+   <div class="progress"><i style="width:${pct}%"></i></div>
+   <div class="mtabs">${tabs}<button class="mtab brief" onclick="openBrief()">📜 브리핑 보기</button></div>
+   <div class="card" id="mc"><span class="mission-tag">MISSION ${mi+1}</span>${p[mi]?` <span class="badge">이미 완료 · ${p[mi].pts}점</span>`:''}<div class="q">${m.q}</div><div id="body"></div>
+   <div class="fb" id="fb"></div><div class="row" id="nx" style="display:none"><button class="btn" onclick="nextMission()">다음 ▶</button></div></div>`;
+  const saved=(CACHE[s.id]||{})[mi];
+  if(saved){ document.getElementById('mc').replaceWith(saved.node); cur.solved=saved.solved; }
+  else R[m.type](m, document.getElementById('body'));
+  scrollTo(0,0);
+}
+function nextMission(){ goMission(firstUnsolved()); }
+function award(mistakes, msg){
+  if(cur.solved) return; cur.solved=true;
+  const p = mistakes===0?100:mistakes===1?60:30;
+  const pr=prog(), prev=pr[cur.mi];
+  if(!prev || p>prev.pts) pr[cur.mi]={pts:p,miss:mistakes};
+  save();
+  const fb=document.getElementById('fb');
+  fb.className='fb show ok';
+  fb.innerHTML=`<b>${mistakes===0?'🎉 완벽해요! +100':'✅ 통과! +'+p}</b>${msg?'<br>'+msg:''}`;
+  const nx=document.getElementById('nx');
+  nx.querySelector('button').textContent = firstUnsolved()<0 ? '🏁 스테이지 클리어!' : '다음 ▶';
+  nx.style.display='flex';
+  const tab=document.querySelectorAll('.mtab')[cur.mi]; if(tab){ tab.classList.add('solved'); tab.textContent='✓ 미션 '+(cur.mi+1); }
+  const n=STAGES[cur.si].missions.length; document.querySelector('.progress i').style.width=Math.round(Object.keys(pr).length/n*100)+'%';
+}
+function nope(msg){
+  const fb=document.getElementById('fb'); fb.className='fb show no'; fb.innerHTML='🙅 '+msg;
+}
+
+// ───────── 미션 렌더러 ─────────
+const R={};
+R.quiz=(m,el)=>{
+  let miss=0;
+  el.innerHTML=`<div class="opts">${m.opts.map((o,i)=>`<button class="opt" data-i="${i}">${String.fromCharCode(9312+i)} ${o}</button>`).join('')}</div>`;
+  el.querySelectorAll('.opt').forEach(b=>b.onclick=()=>{
+    if(cur.solved) return;
+    const i=+b.dataset.i;
+    if(i===m.a){ b.classList.add('right'); el.querySelectorAll('.opt').forEach(x=>x.disabled=true); award(miss,m.ex); }
+    else { b.classList.remove('wrong'); void b.offsetWidth; b.classList.add('wrong'); b.disabled=true; miss++; nope('아쉬워요! 다시 골라 보세요.'); }
+  });
+};
+R.match=(m,el)=>{
+  let miss=0, pick=null, left=m.pairs.length;
+  const rights=m.pairs.map((p,i)=>i).sort(()=>Math.random()-.5);
+  el.innerHTML=`<div class="match"><div class="col">${m.pairs.map((p,i)=>`<button class="opt" data-l="${i}">${p[0]}</button>`).join('')}</div>
+   <div class="col">${rights.map(i=>`<button class="opt" data-r="${i}">${m.pairs[i][1]}</button>`).join('')}</div></div>
+   <p style="color:var(--sub);font-size:.88rem">왼쪽을 누르고 → 짝이 되는 오른쪽을 누르세요</p>`;
+  el.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>{ if(b.disabled)return; el.querySelectorAll('[data-l]').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); pick=+b.dataset.l; });
+  el.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{
+    if(pick===null||b.disabled) return;
+    if(+b.dataset.r===pick){
+      const l=el.querySelector(`[data-l="${pick}"]`); [l,b].forEach(x=>{x.classList.remove('sel','wrong');x.classList.add('done');x.disabled=true;});
+      pick=null; left--; if(left===0) award(miss);
+    } else { b.classList.remove('wrong'); void b.offsetWidth; b.classList.add('wrong'); miss++; }
+  });
+};
+R.tapseq=(m,el)=>{
+  let step=0, miss=0;
+  let segs=''; m.segs.forEach((s,i)=>{segs+=`<button data-i="${i}">${s}</button>`; if(m.seps[i]&&m.seps[i]!==' ') segs+=`<span class="sep">${m.seps[i]}</span>`; else if(m.seps[i]===' ') segs+=`<span class="sep"> </span>`;});
+  el.innerHTML=`<p class="q" id="ask" style="color:var(--accent)"></p><div class="seg">${segs}</div>`;
+  const ask=()=>{document.getElementById('ask').textContent=`👉 "${m.asks[step][0]}"을(를) 눌러라!  (${step+1}/${m.asks.length})`;};
+  ask();
+  el.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{
+    if(cur.solved) return;
+    if(+b.dataset.i===m.asks[step][1]){
+      el.querySelectorAll('.seg button').forEach(x=>x.classList.remove('right','wrong'));
+      b.classList.add('right'); step++;
+      if(step>=m.asks.length){ document.getElementById('ask').textContent='해부 완료! 🔬'; award(miss); }
+      else ask();
+    } else { b.classList.remove('wrong'); void b.offsetWidth; b.classList.add('wrong'); miss++; }
+  });
+};
+R.order=(m,el)=>{
+  let step=0, miss=0;
+  const sh=m.items.map((t,i)=>i).sort(()=>Math.random()-.5);
+  el.innerHTML=`<div class="order-done" id="od"><span style="background:none;color:var(--sub)">여기에 순서대로 쌓여요</span></div>
+   <div class="order-pool">${sh.map(i=>`<button class="opt" data-i="${i}">${m.items[i].replace(/^[①-⑨] /,'')}</button>`).join('')}</div>`;
+  el.querySelectorAll('.order-pool .opt').forEach(b=>b.onclick=()=>{
+    if(cur.solved) return;
+    if(+b.dataset.i===step){
+      const od=document.getElementById('od'); if(step===0) od.innerHTML='';
+      od.innerHTML+=`${step?'<b style="align-self:center">→</b>':''}<span>${m.items[step]}</span>`;
+      b.remove(); step++;
+      if(step===m.items.length) award(miss);
+    } else { b.classList.remove('wrong'); void b.offsetWidth; b.classList.add('wrong'); miss++; }
+  });
+};
+R.build=(m,el)=>{
+  let tries=0; const val=m.slots.map(()=>null);
+  el.innerHTML=m.slots.map((s,si)=>`<div class="slot"><b>${s.label}</b><div class="opts">${s.opts.map((o,oi)=>`<button class="opt" data-s="${si}" data-o="${oi}">${o}</button>`).join('')}</div></div>`).join('')+
+   `<div class="row"><button class="btn" id="sub">🚀 실행!</button></div>`;
+  el.querySelectorAll('.slot .opt').forEach(b=>b.onclick=()=>{
+    if(cur.solved) return;
+    const s=+b.dataset.s; val[s]=+b.dataset.o;
+    el.querySelectorAll(`[data-s="${s}"]`).forEach(x=>x.classList.remove('sel','wrong')); b.classList.add('sel');
+  });
+  document.getElementById('sub').onclick=()=>{
+    if(cur.solved) return;
+    if(val.includes(null)) return nope('아직 빈칸이 있어요!');
+    const bad=m.slots.map((s,i)=>val[i]!==s.a);
+    if(!bad.includes(true)){ el.querySelectorAll('.sel').forEach(x=>x.classList.add('right')); award(tries,m.ex); document.getElementById('sub').disabled=true; }
+    else{
+      tries++;
+      bad.forEach((b,i)=>{ if(b) el.querySelector(`[data-s="${i}"][data-o="${val[i]}"]`).classList.add('wrong'); });
+      nope('틀린 단계가 있어요! 다시 골라 보세요.');
+    }
+  };
+};
+
+// 트래픽 고정 시뮬레이터
+R.sim=(m,el)=>{
+  let tries=0;
+  // 상태: revisions, 현재 트래픽, 고정 여부
+  let revisions=['rev-1'];
+  let trafficRev='rev-1';
+  let pinned=false;
+  let latestRev='rev-1';
+  let deployCount=1;
+  let log=[];
+  let unpinned=false;
+  let sawPinning=false;
+
+  function addLog(msg){ log.push(msg); renderLog(); }
+  function renderLog(){
+    const logEl=document.getElementById('simLog');
+    if(logEl) logEl.innerHTML=log.map(l=>`<div style="padding:2px 0;border-bottom:1px solid var(--line);font-size:.85rem">${l}</div>`).join('');
+  }
+  function renderState(){
+    const stateEl=document.getElementById('simState');
+    if(!stateEl) return;
+    let h=`<div class="tw"><table>
+      <tr><th>리비전</th><th>트래픽</th><th>상태</th></tr>`;
+    revisions.forEach(r=>{
+      const pct = r===trafficRev?'<b style="color:var(--ok)">100%</b>':'<span style="color:var(--sub)">0%</span>';
+      const tag = r===latestRev?' <span class="badge">latest</span>':'';
+      h+=`<tr><td>${r}${tag}</td><td>${pct}</td><td>${r===latestRev?'최신':'이전'}</td></tr>`;
+    });
+    h+=`</table></div>`;
+    h+=`<p style="font-size:.9rem"><b>트래픽 고정:</b> ${pinned?'<span style="color:var(--bad)">고정됨 📌</span>':'<span style="color:var(--ok)">해제 (--to-latest)</span>'}</p>`;
+    h+=`<p style="font-size:.9rem"><b>사용자가 보는 버전:</b> ${trafficRev}</p>`;
+    stateEl.innerHTML=h;
+  }
+
+  el.innerHTML=`
+    <div class="sim-box">
+      <div id="simState"></div>
+      <div class="sim-ctrl">
+        <button class="btn small" id="simDeploy">🚀 새 리비전 배포</button>
+        <button class="btn small ghost" id="simRollback">⏪ 롤백 (이전 리비전)</button>
+        <button class="btn small ghost" id="simUnpin">🔓 --to-latest 해제</button>
+        <button class="btn small ghost" id="simReset">↺ 리셋</button>
+      </div>
+      <div style="margin-top:10px;max-height:180px;overflow-y:auto;background:var(--code);border-radius:10px;padding:8px 10px" id="simLog"></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="simDone">✅ 실험 완료!</button></div>`;
+
+  addLog('🟢 서비스 시작: rev-1이 트래픽 100%를 받고 있습니다.');
+  renderState();
+
+  document.getElementById('simDeploy').onclick=()=>{
+    deployCount++;
+    const newRev='rev-'+deployCount;
+    revisions.push(newRev);
+    latestRev=newRev;
+    if(!pinned){
+      trafficRev=newRev;
+      addLog(`🚀 ${newRev} 배포 완료! 트래픽이 자동으로 ${newRev}로 옮겨갔습니다.`);
+    } else {
+      addLog(`🚀 ${newRev} 배포 완료! ⚠️ 트래픽이 고정되어 있어 ${trafficRev}가 계속 100%. ${newRev}는 0%!`);
+      sawPinning=true;
+    }
+    renderState();
+  };
+
+  document.getElementById('simRollback').onclick=()=>{
+    if(revisions.length<2){ addLog('⚠️ 롤백할 이전 리비전이 없습니다.'); return; }
+    const prevIdx=revisions.indexOf(trafficRev)-1;
+    const target=prevIdx>=0?revisions[prevIdx]:revisions[0];
+    trafficRev=target;
+    pinned=true;
+    addLog(`⏪ 롤백! 트래픽을 ${target}로 고정했습니다. 📌 트래픽이 고정됨!`);
+    renderState();
+  };
+
+  document.getElementById('simUnpin').onclick=()=>{
+    if(!pinned){ addLog('ℹ️ 이미 --to-latest 상태입니다.'); return; }
+    pinned=false;
+    trafficRev=latestRev;
+    unpinned=true;
+    addLog(`🔓 --to-latest 해제! 트래픽이 최신 리비전 ${latestRev}로 옮겨갔습니다.`);
+    renderState();
+  };
+
+  document.getElementById('simReset').onclick=()=>{
+    revisions=['rev-1']; trafficRev='rev-1'; pinned=false; latestRev='rev-1';
+    deployCount=1; log=[]; unpinned=false; sawPinning=false;
+    addLog('🟢 서비스 시작: rev-1이 트래픽 100%를 받고 있습니다.');
+    renderState();
+  };
+
+  document.getElementById('simDone').onclick=()=>{
+    if(cur.solved) return;
+    if(sawPinning && unpinned){
+      award(0,'트래픽 고정을 직접 경험하고 --to-latest로 해제했어요! 롤백/카나리 후에는 반드시 고정 해제를 잊지 마세요.');
+    } else if(sawPinning){
+      tries++; nope('트래픽이 고정된 것을 확인했지만, --to-latest로 해제도 해 보세요!');
+    } else {
+      tries++; nope('롤백 버튼으로 트래픽을 고정시킨 뒤, 새 배포를 해서 0%로 남는 걸 확인해 보세요!');
+    }
+  };
+};
+
+// ───────── 클리어 ─────────
+function stageClear(){
+  const s=STAGES[cur.si], n=s.missions.length, res=Object.values(prog());
+  cur.pts=res.reduce((a,r)=>a+r.pts,0);
+  const perfect=res.filter(r=>r.miss===0).length;
+  const st= perfect===n?3: perfect>=n-1?2:1;
+  delete S.prog[s.id]; delete CACHE[s.id];
+  const prev=S.done[s.id];
+  if(!prev){ S.score+=cur.pts; }
+  else if(cur.pts>prev.pts){ S.score+=cur.pts-prev.pts; }
+  S.done[s.id]={stars:Math.max(st,prev?prev.stars:0),pts:Math.max(cur.pts,prev?prev.pts:0)};
+  save();
+  const last=cur.si===STAGES.length-1;
+  app.innerHTML=hud()+`<div class="card clear"><div class="medal">${s.emo}</div>
+   <h2>STAGE ${cur.si+1} CLEAR!</h2><div class="stars">${stars(st)}</div>
+   <p>이번 스테이지 <b>+${cur.pts}점</b></p><p>🏅 배지 획득: <span class="badge">${s.badge}</span></p>
+   <div class="row"><button class="btn ghost" onclick="startStage(${cur.si},true)">🔁 다시 하기</button>
+   ${last?`<button class="btn" onclick="showFinal()">🏆 최종 결과</button>`:`<button class="btn" onclick="startStage(${cur.si+1})">다음 스테이지 ▶</button>`}
+   <button class="btn ghost" onclick="showMap()">🗺️ 지도</button></div></div>`;
+  confetti(); scrollTo(0,0);
+}
+function confetti(){
+  const e=['🎉','✨','☁️','🚀','⭐','🔄','🏷️'];
+  for(let i=0;i<28;i++){const c=document.createElement('div');c.className='confetti';c.textContent=e[i%e.length];
+    c.style.left=Math.random()*100+'vw';c.style.animationDuration=(1.6+Math.random()*1.6)+'s';c.style.animationDelay=Math.random()*.5+'s';
+    document.body.appendChild(c);setTimeout(()=>c.remove(),4000);}
+}
+function showFinal(){
+  const total=Object.values(S.done).reduce((a,d)=>a+d.stars,0);
+  const maxStars=STAGES.length*3;
+  const title= total>=maxStars-2?'🏆 Cloud Run 배포 그랜드 마스터':total>=maxStars-7?'🥇 믿음직한 DevOps 엔지니어':'🥈 성장 중인 클라우드 엔지니어';
+  app.innerHTML=hud(`<button class="btn ghost small" onclick="showNote()">📖 정리노트</button><button class="btn ghost small" onclick="showMap()">🗺️ 지도</button>`)+
+  `<div class="card clear"><div class="medal">🏆</div><h2>${title}</h2><p>별 ${total} / ${maxStars} · ${S.score}점</p>
+   <div class="badges">${STAGES.map(s=>`<span class="badge">${s.badge}</span>`).join('')}</div></div>
+  <div class="card"><h3>📌 오늘의 핵심 8줄 (이것만 기억!)</h3><ol class="summary">
+   <li><b>Cloud Run이 로드밸런서 역할</b>: 리비전 사이 트래픽 설정으로 요청을 나눔.</li>
+   <li><b>스타트업 프로브를 /health로</b> 바꾸면 준비가 늦은 버전도 실패 0건.</li>
+   <li><b>태그 URL</b>로 0%인 새 리비전을 사용자 영향 없이 확인 가능.</li>
+   <li><b>롤백은 트래픽 설정만</b> 바꾸므로 몇 초 만에 완료.</li>
+   <li><b>트래픽 고정</b>: 롤백/카나리 후 --to-latest로 풀어야 새 배포가 트래픽을 받음.</li>
+   <li><b>secret key는 Secret Manager</b>에, publishable key는 환경변수로.</li>
+   <li><b>0% 배포→스모크 테스트→전환</b>을 워크플로로 자동화, 실패 시 전환 차단.</li>
+   <li><b>무중단 = 요청 확인 스크립트의 실패 0건</b>으로 증명.</li>
+  </ol>
+  <h3>🔭 아직 남은 숙제</h3><ul>
+   <li>답변 품질 모니터링은 /health와 /version만으로 불가</li>
+   <li>스키마 변경이 있는 배포는 아직 미시험</li>
+   <li>staging/production 런타임 서비스 계정이 같아 권한 분리 미흡</li>
+   <li>카나리 자동 승격은 도전 과제</li></ul></div>`;
+  confetti(); scrollTo(0,0);
+}
+
+showMap();
+</script>
+</body>
+</html>
