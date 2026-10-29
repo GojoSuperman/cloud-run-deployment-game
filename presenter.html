@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cloud Run 무중단 배포 Auto-Presenter</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap');
+:root{
+  --bg:#0a0e1a;--card:#121828;--card2:#1a2240;
+  --accent:#00d4ff;--accent2:#7c4dff;--green:#00e676;--red:#ff5252;--orange:#ffab40;--yellow:#ffd740;
+  --blue-rev:#448aff;--green-rev:#00e676;
+  --text:#e0e6f0;--text2:#7a8599;
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:16px/1.6 'Noto Sans KR',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;height:100vh}
+
+/* ── 레이아웃 ── */
+.presenter{display:grid;grid-template-rows:auto 1fr auto;height:100vh}
+.top-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;
+  background:rgba(18,24,40,.9);border-bottom:1px solid rgba(255,255,255,.06);backdrop-filter:blur(10px)}
+.top-bar h1{font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px}
+.top-bar h1 span{color:var(--accent)}
+.step-indicator{display:flex;gap:6px;align-items:center}
+.step-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.15);transition:all .4s}
+.step-dot.active{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+.step-dot.done{background:var(--green)}
+
+.main-stage{position:relative;overflow:hidden}
+
+.bottom-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;
+  background:rgba(18,24,40,.9);border-top:1px solid rgba(255,255,255,.06);backdrop-filter:blur(10px)}
+.controls{display:flex;gap:8px;align-items:center}
+.ctrl-btn{background:var(--card2);border:1px solid rgba(255,255,255,.1);color:var(--text);border-radius:8px;
+  padding:8px 16px;font:inherit;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px}
+.ctrl-btn:hover{background:rgba(0,212,255,.1);border-color:var(--accent)}
+.ctrl-btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;font-weight:600}
+.ctrl-btn.primary:hover{transform:scale(1.03)}
+.ctrl-btn:disabled{opacity:.3;cursor:not-allowed}
+.speed-badge{font-size:.75rem;color:var(--text2)}
+.step-title{font-size:.9rem;color:var(--text2)}
+
+/* ── 슬라이드 공통 ── */
+.slide{position:absolute;inset:0;display:flex;align-items:safe center;justify-content:center;
+  opacity:0;transform:translateX(60px);transition:all .5s ease-out;pointer-events:none;padding:16px 40px;overflow-y:auto}
+.slide.active{opacity:1;transform:translateX(0);pointer-events:auto}
+.slide.exit{opacity:0;transform:translateX(-60px)}
+
+.slide-content{max-width:1200px;width:100%;display:flex;flex-direction:column;gap:18px}
+.slide-header{text-align:center}
+.slide-header .num{font-size:1rem;color:var(--accent);font-weight:700;letter-spacing:2px}
+.slide-header h2{font-size:2.8rem;font-weight:800;margin-top:6px}
+.slide-header h2 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.slide-header p{color:var(--text2);margin-top:10px;font-size:1.15rem}
+
+/* ── 파이프라인 시각화 ── */
+.pipeline{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;margin:20px 0}
+.pipe-node{background:var(--card);border:2px solid rgba(255,255,255,.08);border-radius:14px;
+  padding:18px 24px;min-width:120px;text-align:center;position:relative;transition:all .5s;opacity:.4}
+.pipe-node.lit{opacity:1;border-color:var(--accent);box-shadow:0 0 20px rgba(0,212,255,.2)}
+.pipe-node.pass{opacity:1;border-color:var(--green);box-shadow:0 0 20px rgba(0,230,118,.15)}
+.pipe-node.fail{opacity:1;border-color:var(--red);box-shadow:0 0 20px rgba(255,82,82,.15)}
+.pipe-node .p-icon{font-size:1.8rem;margin-bottom:6px}
+.pipe-node .p-label{font-size:.9rem;font-weight:600}
+.pipe-node .p-status{font-size:.8rem;margin-top:4px;font-weight:500}
+.pipe-node .p-status.ok{color:var(--green)}
+.pipe-node .p-status.err{color:var(--red)}
+.pipe-node .p-status.run{color:var(--accent);animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.pipe-arrow{font-size:1.2rem;color:rgba(255,255,255,.15);margin:0 6px;transition:color .4s}
+.pipe-arrow.lit{color:var(--accent)}
+.pipe-arrow.pass{color:var(--green)}
+
+/* ── 트래픽 시각화 ── */
+.traffic-viz{display:flex;gap:24px;justify-content:center;align-items:stretch;flex-wrap:wrap;margin:20px 0}
+.rev-box{background:var(--card);border-radius:16px;padding:16px 20px;flex:1;min-width:200px;max-width:350px;
+  border:2px solid rgba(255,255,255,.06);transition:all .5s;position:relative;overflow:hidden}
+.rev-box.blue{border-color:var(--blue-rev)}
+.rev-box.green-r{border-color:var(--green-rev)}
+.rev-box .rev-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.rev-box .rev-name{font-weight:700;font-size:1.1rem;display:flex;align-items:center;gap:8px}
+.rev-box .rev-badge{font-size:.75rem;padding:3px 10px;border-radius:20px;font-weight:600}
+.rev-box.blue .rev-badge{background:rgba(68,138,255,.15);color:var(--blue-rev)}
+.rev-box.green-r .rev-badge{background:rgba(0,230,118,.15);color:var(--green-rev)}
+.traffic-pct{font-size:3rem;font-weight:900;text-align:center;margin:10px 0;transition:all .5s}
+.traffic-pct.blue-c{color:var(--blue-rev)}
+.traffic-pct.green-c{color:var(--green-rev)}
+.traffic-bar{height:10px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden;margin-top:8px}
+.traffic-fill{height:100%;border-radius:5px;transition:width 1s ease-out}
+.traffic-fill.bf{background:linear-gradient(90deg,var(--blue-rev),#82b1ff)}
+.traffic-fill.gf{background:linear-gradient(90deg,var(--green-rev),#69f0ae)}
+.rev-tag{position:absolute;top:8px;right:12px;font-size:.7rem;background:rgba(0,212,255,.1);
+  color:var(--accent);padding:2px 8px;border-radius:10px;font-weight:600;opacity:0;transition:opacity .4s}
+.rev-tag.show{opacity:1}
+
+/* ── 요청 시뮬레이터 ── */
+.req-monitor{background:var(--card);border-radius:14px;padding:20px;border:1px solid rgba(255,255,255,.06)}
+.req-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.req-header h4{font-size:.9rem;font-weight:600;display:flex;align-items:center;gap:6px}
+.req-stats{display:flex;gap:16px}
+.req-stat{text-align:center}
+.req-stat .rs-num{font-size:1.8rem;font-weight:800}
+.req-stat .rs-num.ok{color:var(--green)}
+.req-stat .rs-num.fail{color:var(--red)}
+.req-stat .rs-label{font-size:.7rem;color:var(--text2)}
+.req-log{height:200px;overflow-y:auto;font-family:var(--mono);font-size:.85rem;line-height:1.8;
+  background:rgba(0,0,0,.3);border-radius:8px;padding:12px;margin-top:8px}
+.req-log::-webkit-scrollbar{width:4px}
+.req-log::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
+.req-line.ok{color:var(--green)}
+.req-line.err{color:var(--red)}
+.req-line .ts{color:var(--text2)}
+.req-line .rev{color:var(--accent)}
+
+/* ── 터미널 ── */
+.term{background:#0d1117;border:1px solid #30363d;border-radius:12px;overflow:hidden;margin:12px 0}
+.term-top{background:#161b22;padding:6px 12px;display:flex;align-items:center;gap:6px}
+.term-dot{width:9px;height:9px;border-radius:50%}
+.term-dot.r{background:#ff5f57}.term-dot.y{background:#febc2e}.term-dot.g{background:#28c840}
+.term-label{font-size:.7rem;color:#8b949e;margin-left:8px}
+.term-body{padding:18px;font-family:var(--mono);font-size:.95rem;line-height:1.7;color:#c9d1d9;
+  white-space:pre-wrap}
+.term-body .cmd{color:#f0f6fc;font-weight:600}
+.term-body .g{color:var(--green)}
+.term-body .r{color:var(--red)}
+.term-body .c{color:var(--accent)}
+.term-body .d{color:#6e7681}
+.term-body .y{color:var(--yellow)}
+
+/* ── 설명 카드 ── */
+.explain-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:16px 0}
+.explain-card{background:var(--card);border-radius:12px;padding:20px;border:1px solid rgba(255,255,255,.04);
+  transition:all .3s}
+.explain-card:hover{border-color:rgba(0,212,255,.15)}
+.explain-card .ec-icon{font-size:1.6rem;margin-bottom:8px}
+.explain-card h5{font-size:1rem;font-weight:700;margin-bottom:6px}
+.explain-card p{font-size:.9rem;color:var(--text2)}
+
+/* ── 결론 슬라이드 ── */
+.conclusion{text-align:center;padding:40px 0}
+.conclusion h2{font-size:2rem;font-weight:900;margin-bottom:16px}
+.conclusion h2 em{font-style:normal;color:var(--green)}
+.conclusion .big-stats{display:flex;justify-content:center;gap:32px;margin:24px 0;flex-wrap:wrap}
+.conclusion .big-stat{text-align:center}
+.conclusion .big-stat .bs-num{font-size:3rem;font-weight:900}
+.conclusion .big-stat .bs-num.g{color:var(--green)}
+.conclusion .big-stat .bs-num.a{color:var(--accent)}
+.conclusion .big-stat .bs-num.o{color:var(--orange)}
+.conclusion .big-stat .bs-label{font-size:.85rem;color:var(--text2);margin-top:4px}
+.check-list{text-align:left;max-width:500px;margin:24px auto;background:var(--card);border-radius:14px;padding:20px}
+.check-item{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:.92rem;
+  border-bottom:1px solid rgba(255,255,255,.04)}
+.check-item:last-child{border:none}
+.check-item .ci{color:var(--green);font-size:1.1rem}
+
+/* ── 인트로/아웃트로 ── */
+.cover{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  min-height:100%;position:relative}
+.cover .cover-bg{position:absolute;inset:0;z-index:0;overflow:hidden}
+.cover .cover-bg .orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:.35;animation:orbFloat 8s ease-in-out infinite}
+.orb-1{width:400px;height:400px;background:var(--accent);top:-10%;left:-10%;animation-delay:0s}
+.orb-2{width:350px;height:350px;background:var(--accent2);bottom:-10%;right:-10%;animation-delay:2s}
+.orb-3{width:250px;height:250px;background:var(--green);top:30%;right:20%;animation-delay:4s}
+@keyframes orbFloat{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-20px) scale(1.1)}}
+.cover-inner{position:relative;z-index:1}
+.cover .cover-icon{font-size:4rem;margin-bottom:16px;animation:coverPulse 2s ease-in-out infinite}
+@keyframes coverPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.cover h2{font-size:2.6rem;font-weight:900;line-height:1.3;margin-bottom:12px}
+.cover h2 em{font-style:normal;background:linear-gradient(135deg,var(--accent),var(--accent2),var(--green));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-size:200% 200%;
+  animation:gradShift 4s ease-in-out infinite}
+@keyframes gradShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.cover .cover-sub{font-size:1.1rem;color:var(--text2);margin-top:8px;font-weight:400}
+.cover .cover-meta{display:flex;gap:24px;margin-top:28px;flex-wrap:wrap;justify-content:center}
+.cover .meta-item{background:var(--card);border:1px solid rgba(255,255,255,.06);border-radius:12px;
+  padding:10px 18px;font-size:.85rem;display:flex;align-items:center;gap:8px}
+.cover .meta-item span{color:var(--accent);font-weight:700}
+.cover .cover-line{width:60px;height:3px;border-radius:2px;margin:20px auto 0;
+  background:linear-gradient(90deg,var(--accent),var(--accent2))}
+
+.thanks h2{font-size:2.8rem}
+.thanks .thanks-emoji{font-size:5rem;margin-bottom:20px;animation:coverPulse 2s ease-in-out infinite}
+.thanks .thanks-sub{font-size:1.2rem;color:var(--text2);margin-top:12px}
+.thanks .thanks-links{display:flex;gap:16px;margin-top:28px;flex-wrap:wrap;justify-content:center}
+.thanks .tl{background:var(--card);border:1px solid rgba(255,255,255,.06);border-radius:12px;
+  padding:10px 20px;font-size:.85rem;display:flex;align-items:center;gap:8px;transition:all .3s}
+.thanks .tl:hover{border-color:var(--accent);background:rgba(0,212,255,.05)}
+.thanks .tl .tl-icon{font-size:1.2rem}
+
+/* ── 배경 ── */
+.bg-grid{position:fixed;inset:0;z-index:-1;
+  background-image:radial-gradient(circle at 1px 1px, rgba(0,212,255,.04) 1px, transparent 0);
+  background-size:40px 40px}
+
+/* ── 반응형 ── */
+@media(max-width:700px){
+  .slide{padding:20px}
+  .slide-header h2{font-size:1.3rem}
+  .traffic-viz{flex-direction:column}
+  .pipeline{flex-direction:column;gap:4px}
+  .pipe-arrow{transform:rotate(90deg)}
+  .traffic-pct{font-size:1.8rem}
+  .conclusion .big-stat .bs-num{font-size:2rem}
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<div class="presenter">
+  <!-- 상단바 -->
+  <div class="top-bar">
+    <h1>☁️ <span>Cloud Run 무중단 배포</span> — Auto Presenter</h1>
+    <div class="step-indicator" id="stepDots"></div>
+  </div>
+
+  <!-- 메인 스테이지 -->
+  <div class="main-stage" id="stage"></div>
+
+  <!-- 하단바 -->
+  <div class="bottom-bar">
+    <div class="step-title" id="stepTitle">시작하기</div>
+    <div class="controls">
+      <button class="ctrl-btn" id="prevBtn" onclick="prev()" disabled>← 이전</button>
+      <button class="ctrl-btn primary" id="playBtn" onclick="togglePlay()">▶ 자동 재생</button>
+      <button class="ctrl-btn" id="nextBtn" onclick="next()">다음 →</button>
+      <button class="ctrl-btn" id="voiceBtn" onclick="toggleVoice()">🔊 음성</button>
+      <button class="ctrl-btn" id="fsBtn" onclick="toggleFS()">⛶ 전체화면</button>
+      <span class="speed-badge" id="speedBadge">5초/슬라이드</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const SLIDES = [
+  // INTRO: 포토그래픽 커버
+  {
+    title:'표지',
+    build:()=>`<div class="slide-content">
+      <div class="cover">
+        <div class="cover-bg">
+          <div class="orb orb-1"></div>
+          <div class="orb orb-2"></div>
+          <div class="orb orb-3"></div>
+        </div>
+        <div class="cover-inner">
+          <div class="cover-icon">☁️</div>
+          <h2>Cloud Run으로<br><em>무중단 배포</em> 하기</h2>
+          <p class="cover-sub">PR 머지 한 번으로 완성하는 블루그린 자동 배포 파이프라인</p>
+          <div class="cover-line"></div>
+          <div class="cover-meta">
+            <div class="meta-item">📚 <span>9강</span></div>
+            <div class="meta-item">👤 <span>모두의연구소</span></div>
+            <div class="meta-item">⏱️ <span>5분 발표</span></div>
+          </div>
+        </div>
+      </div>
+    </div>`
+  },
+  // 0: 타이틀 (개요)
+  {
+    title:'Cloud Run 무중단 배포 워크플로',
+    build:()=>`<div class="slide-content">
+      <div class="slide-header">
+        <div class="num">9강 · WORKFLOW PRESENTATION</div>
+        <h2>머지 한 번으로<br><em>무중단 배포</em> 만들기</h2>
+        <p>PR 머지 → CI → 이미지 빌드 → 0% 배포 → 스모크 테스트 → 전환<br>사람이 하는 일은 <strong>머지</strong>와 <strong>승인</strong>뿐</p>
+      </div>
+      <div class="pipeline" id="pipe0">
+        ${pipeHTML(['🔀 PR 머지','🧪 CI 테스트','🐳 이미지 빌드','☁️ 0% 배포','🔍 스모크 테스트','✅ 전환'],[])}
+      </div>
+      <div class="explain-grid">
+        <div class="explain-card"><div class="ec-icon">🎯</div><h5>목표</h5><p>배포 중 사용자 오류 0건, 망가진 버전은 전환 안 됨</p></div>
+        <div class="explain-card"><div class="ec-icon">⚡</div><h5>핵심</h5><p>Cloud Run이 로드밸런서를 운영하고, 트래픽 설정만 바꿔서 전환</p></div>
+        <div class="explain-card"><div class="ec-icon">🔄</div><h5>롤백</h5><p>트래픽 설정만 되돌리면 몇 초 만에 이전 버전으로 복구</p></div>
+      </div>
+    </div>`
+  },
+  // 1: PR 머지 → CI
+  {
+    title:'STEP 1 — PR 머지 & CI 테스트',
+    build:()=>`<div class="slide-content">
+      <div class="slide-header">
+        <div class="num">STEP 1</div>
+        <h2>PR 머지 & <em>CI 테스트</em></h2>
+        <p>main에 머지되면 GitHub Actions가 자동으로 시작됩니다</p>
+      </div>
+      <div class="pipeline" id="pipe1">
+        ${pipeHTML(['🔀 PR 머지','🧪 CI 테스트','🐳 이미지 빌드','☁️ 0% 배포','🔍 스모크 테스트','✅ 전환'],['lit','lit'])}
+      </div>
+      <div class="term">
+        <div class="term-top"><div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div><span class="term-label">GitHub Actions — CI</span></div>
+        <div class="term-body"><span class="d"># PR이 main에 머지됨 → CI 워크플로 트리거</span>
+<span class="cmd">Run pytest tests/</span>
+<span class="g">✓</span> test_health.py <span class="g">PASSED</span>
+<span class="g">✓</span> test_version.py <span class="g">PASSED</span>
+<span class="g">✓</span> test_chat.py <span class="g">PASSED</span>
+<span class="g">══ 3 passed in 4.21s ══</span>
+
+<span class="cmd">Run ruff check .</span>
+<span class="g">All checks passed!</span></div>
+      </div>
+      <div class="explain-grid">
+        <div class="explain-card"><div class="ec-icon">🔀</div><h5>트리거</h5><p>main 브랜치에 push(머지)되면 deploy.yml이 자동 시작</p></div>
+        <div class="explain-card"><div class="ec-icon">🧪</div><h5>CI 테스트</h5><p>pytest로 단위 테스트, ruff로 코드 스타일 검사</p></div>
+        <div class="explain-card"><div class="ec-icon">🛡️</div><h5>게이트</h5><p>테스트 실패 시 다음 단계로 가지 않음</p></div>
+      </div>
+    </div>`
+  },
+  // 2: 이미지 빌드
+  {
+    title:'STEP 2 — Docker 이미지 빌드 & 푸시',
+    build:()=>`<div class="slide-content">
+      <div class="slide-header">
+        <div class="num">STEP 2</div>
+        <h2>Docker 이미지 <em>빌드 & 푸시</em></h2>
+        <p>Artifact Registry에 새 이미지를 올립니다</p>
+      </div>
+      <div class="pipeline" id="pipe2">
+        ${pipeHTML(['🔀 PR 머지','🧪 CI 테스트','🐳 이미지 빌드','☁️ 0% 배포','🔍 스모크 테스트','✅ 전환'],['pass','pass','lit'])}
+      </div>
+      <div class="term">
+        <div class="term-top"><div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div><span class="term-label">GitHub Actions — Build</span></div>
+        <div class="term-body"><span class="d"># Workload Identity Federation으로 인증 (키 파일 없음)</span>
+<span class="cmd">docker build -t us-central1-docker.pkg.dev/$PROJECT/repo/friend-agent:$SHA .</span>
+<span class="d">[1/5] FROM python:3.12-slim</span>
+<span class="d">[2/5] COPY requirements.txt .</span>
+<span class="d">[3/5] RUN pip install -r requirements.txt</span>
+<span class="d">[4/5] COPY . .</span>
+<span class="d">[5/5] EXPOSE 8080</span>
+<span class="g">Successfully built a3f7c2d</span>
+
+<span class="cmd">docker push us-central1-docker.pkg.dev/$PROJECT/repo/friend-agent:$SHA</span>
+<span class="g">Pushed: a3f7c2d → Artifact Registry ✓</span></div>
+      </div>
+      <div class="explain-grid">
+        <div class="explain-card"><div class="ec-icon">🐳</div><h5>이미지 태그</h5><p>커밋 SHA를 태그로 사용 → 어느 코드인지 추적 가능</p></div>
+        <div class="explain-card"><div class="ec-icon">🔐</div><h5>WIF 인증</h5><p>Workload Identity Federation으로 키 파일 없이 GCP 인증</p></div>
+      </div>
+    </div>`
+  },
+  // 3: 0% 배포
+  {
+    title:'STEP 3 — 트래픽 0%로 새 리비전 배포',
+    build:()=>{
+      setTimeout(()=>animTraffic('t3',100,0,0,0),500);
+      setTimeout(()=>{animTraffic('t3',100,0,0,0);showTag('tag3')},1200);
+      return `<div class="slide-content">
+      <div class="slide-header">
+        <div class="num">STEP 3 · 핵심</div>
+        <h2>트래픽 <em>0%</em>로 새 리비전 배포</h2>
+        <p>--no-traffic --tag green → 사용자는 여전히 이전 리비전을 씁니다</p>
+      </div>
+      <div class="pipeline" id="pipe3">
+        ${pipeHTML(['🔀 PR 머지','🧪 CI 테스트','🐳 이미지 빌드','☁️ 0% 배포','🔍 스모크 테스트','✅ 전환'],['pass','pass','pass','lit'])}
+      </div>
+      <div class="term">
+        <div class="term-top"><div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div><span class="term-label">deploy.yml — 0% 배포</span></div>
+        <div class="term-body"><span class="cmd">gcloud run deploy friend-agent \\
+  --image=us-central1-docker.pkg.dev/$PROJECT/repo/friend-agent:$SHA \\
+  --region=us-central1 \\
+  <span class="y">--no-traffic</span> \\
+  <span class="y">--tag green</span> \\
+  --startup-probe=httpGet.path=/health,periodSeconds=5,failureThreshold=12</span>
+
+<span class="g">✓ Deploying new revision... done</span>
+<span class="c">Tag URL: https://green---friend-agent-xxx.run.app</span>
+<span class="d">Traffic: 0% (사용자에게 영향 없음)</span></div>
+      </div>
+      <div class="traffic-viz" id="t3">
+        <div class="rev-box blue">
+          <div class="rev-header"><span class="rev-name">🔵 리비전 1 (현재)</span><span class="rev-badge">SERVING</span></div>
+          <div class="traffic-pct blue-c" id="t3-blue">100%</div>
+          <div class="traffic-bar"><div class="traffic-fill bf" id="t3-blue-bar" style="width:100%"></div></div>
+        </div>
+        <div class="rev-box green-r">
+          <div class="rev-header"><span class="rev-name">🟢 리비전 2 (새 버전)</span><span class="rev-badge">NEW</span></div>
+          <div class="traffic-pct green-c" id="t3-green">0%</div>
+          <div class="traffic-bar"><div class="traffic-fill gf" id="t3-green-bar" style="width:0%"></div></div>
+          <div class="rev-tag" id="tag3">🏷️ tag: green</div>
+        </div>
+      </div>
+    </div>`;
+    }
+  },
+  // 4: 스모크 테스트
+  {
+    title:'STEP 4 — 스모크 테스트 (태그 URL)',
+    build:()=>`<div class="slide-content">
+      <div class="slide-header">
+        <div class="num">STEP 4</div>
+        <h2><em>스모크 테스트</em> — 태그 URL로 확인</h2>
+        <p>원래 주소가 아닌 태그 URL로 새 리비전만 확인합니다</p>
+      </div>
+      <div class="pipeline" id="pipe4">
+        ${pipeHTML(['🔀 PR 머지','🧪 CI 테스트','🐳 이미지 빌드','☁️ 0% 배포','🔍 스모크 테스트','✅ 전환'],['pass','pass','pass','pass','lit'])}
+      </div>
+      <div class="term">
+        <div class="term-top"><div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div><span class="term-label">deploy.yml — Smoke Test</span></div>
+        <div class="term-body"><span class="d"># 태그 URL의 /health 확인 (10초 간격, 최대 6번)</span>
+<span class="cmd">TAG_URL="https://green---friend-agent-xxx.run.app"</span>
+
+<span class="d">Attempt 1/6...</span>
+<span class="cmd">curl -sf "$TAG_URL/health"</span>
+<span class="g">{"status": "ok"} ✓</span>
+
+<span class="d"># /version의 commit이 이번 커밋과 같은지 확인</span>
+<span class="cmd">curl -sf "$TAG_URL/version"</span>
+<span class="g">{"commit": "a3f7c2d", "banner": "v2.1"} ✓</span>
+
+<span class="g">══ 스모크 테스트 통과! ══</span>
+<span class="d">→ 이 단계가 실패하면 전환 단계로 가지 않음</span></div>
+      </div>
+      <div class="explain-grid">
+        <div class="explain-card"><div class="ec-icon">🏷️</div><h5>왜 태그 URL?</h5><p>원래 주소로 확인하면 이전 리비전(100%)이 답함. 태그 URL은 새 리비전에만 감</p></div>
+        <div class="explain-card"><div class="ec-icon">🔄</div><h5>재시도</h5><p>콜드 스타트로 첫 요청이 느릴 수 있어 여러 번 시도</p></div>
+        <div class="explain-card"><div class="ec-icon">🛑</div><h5>실패 시</h5><p>워크플로 실패로 끝남 → 전환 안 됨 → 사용자 영향 0</p></div>
+      </div>
+    </div>`
+  },
+  // 5: 전환
+  {
+    title:'STEP 5 — 블루그린 전환 (100%)',
+    build:()=>{
+      setTimeout(()=>animTraffic('t5',100,0,0,100),800);
+      return `<div class="slide-content">
+      <div class="slide-header">
+        <div class="num">STEP 5 · 전환</div>
+        <h2>블루그린 <em>전환</em> — 100%로</h2>
+        <p>스모크 테스트 통과 → 트래픽을 새 리비전으로 한 번에 옮깁니다</p>
+      </div>
+      <div class="pipeline" id="pipe5">
+        ${pipeHTML(['🔀 PR 머지','🧪 CI 테스트','🐳 이미지 빌드','☁️ 0% 배포','🔍 스모크 테스트','✅ 전환'],['pass','pass','pass','pass','pass','lit'])}
+      </div>
+      <div class="term">
+        <div class="term-top"><div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div><span class="term-label">deploy.yml — 전환 & 정리</span></div>
+        <div class="term-body"><span class="d"># 이전 리비전 이름 저장 (롤백용)</span>
+<span class="cmd">PREV=$(gcloud run services describe friend-agent --format="...")</span>
+
+<span class="d"># green 태그로 100% 전환</span>
+<span class="cmd">gcloud run services update-traffic friend-agent <span class="y">--to-tags green=100</span></span>
+<span class="g">✓ Traffic: green → 100%</span>
+
+<span class="d"># 트래픽 고정 해제</span>
+<span class="cmd">gcloud run services update-traffic friend-agent <span class="y">--to-latest</span></span>
+<span class="g">✓ Traffic follows latest revision</span></div>
+      </div>
+      <div class="traffic-viz" id="t5">
+        <div class="rev-box blue">
+          <div class="rev-header"><span class="rev-name">🔵 리비전 1 (이전)</span><span class="rev-badge">OLD</span></div>
+          <div class="traffic-pct blue-c" id="t5-blue">100%</div>
+          <div class="traffic-bar"><div class="traffic-fill bf" id="t5-blue-bar" style="width:100%"></div></div>
+        </div>
+        <div class="rev-box green-r">
+          <div class="rev-header"><span class="rev-name">🟢 리비전 2 (새 버전)</span><span class="rev-badge">ACTIVE</span></div>
+          <div class="traffic-pct green-c" id="t5-green">0%</div>
+          <div class="traffic-bar"><div class="traffic-fill gf" id="t5-green-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>`;
+    }
+  },
+  // 6: 무중단 증명
+  {
+    title:'STEP 6 — 무중단 증명 (실패 0건)',
+    build:()=>{
+      setTimeout(()=>runReqSim(),600);
+      return `<div class="slide-content">
+      <div class="slide-header">
+        <div class="num">STEP 6 · 증명</div>
+        <h2>무중단 <em>증명</em> — 실패 0건</h2>
+        <p>배포하는 동안 요청 확인 스크립트로 실패 수를 측정합니다</p>
+      </div>
+      <div class="req-monitor">
+        <div class="req-header">
+          <h4>📊 watch_requests.py — 실시간 모니터</h4>
+          <div class="req-stats">
+            <div class="req-stat"><div class="rs-num ok" id="reqOk">0</div><div class="rs-label">성공</div></div>
+            <div class="req-stat"><div class="rs-num fail" id="reqFail">0</div><div class="rs-label">실패</div></div>
+          </div>
+        </div>
+        <div class="req-log" id="reqLog"></div>
+      </div>
+      <div class="explain-grid">
+        <div class="explain-card"><div class="ec-icon">📏</div><h5>측정 방법</h5><p>0.2초마다 /version에 요청, 응답 코드와 리비전 기록</p></div>
+        <div class="explain-card"><div class="ec-icon">🎯</div><h5>판단 기준</h5><p>실패 0건 + 리비전별 응답 수에 이전/새 버전 모두 보임</p></div>
+        <div class="explain-card"><div class="ec-icon">⚠️</div><h5>주의</h5><p>와이파이 문제도 실패로 잡힘 → 실패 시각과 배포 시각 대조</p></div>
+      </div>
+    </div>`;
+    }
+  },
+  // 7: 롤백
+  {
+    title:'STEP 7 — 원클릭 롤백',
+    build:()=>{
+      setTimeout(()=>animTraffic('t7',0,100,100,0),800);
+      return `<div class="slide-content">
+      <div class="slide-header">
+        <div class="num">STEP 7 · 안전장치</div>
+        <h2>원클릭 <em>롤백</em></h2>
+        <p>문제 발생 시 Actions 탭 → Run workflow 버튼 하나로 이전 버전 복구</p>
+      </div>
+      <div class="term">
+        <div class="term-top"><div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div><span class="term-label">rollback.yml — workflow_dispatch</span></div>
+        <div class="term-body"><span class="d"># Actions 탭에서 버튼 클릭 → 이전 리비전 이름 입력</span>
+<span class="cmd">gcloud run services update-traffic friend-agent \\
+  --region=us-central1 \\
+  <span class="y">--to-revisions friend-agent-00042-abc=100</span></span>
+
+<span class="g">✓ Traffic: friend-agent-00042-abc → 100%</span>
+<span class="d">소요 시간: 약 3초 (이미지 빌드 없음, 트래픽 설정만 변경)</span>
+
+<span class="cmd">curl -sf https://friend-agent-xxx.run.app/version</span>
+<span class="g">{"commit": "prev-sha", "revision": "friend-agent-00042-abc"} ✓</span></div>
+      </div>
+      <div class="traffic-viz" id="t7">
+        <div class="rev-box green-r">
+          <div class="rev-header"><span class="rev-name">🟢 리비전 2 (문제 버전)</span><span class="rev-badge" style="background:rgba(255,82,82,.15);color:var(--red)">ISSUE</span></div>
+          <div class="traffic-pct green-c" id="t7-green">100%</div>
+          <div class="traffic-bar"><div class="traffic-fill gf" id="t7-green-bar" style="width:100%"></div></div>
+        </div>
+        <div class="rev-box blue">
+          <div class="rev-header"><span class="rev-name">🔵 리비전 1 (안전 버전)</span><span class="rev-badge">ROLLBACK</span></div>
+          <div class="traffic-pct blue-c" id="t7-blue">0%</div>
+          <div class="traffic-bar"><div class="traffic-fill bf" id="t7-blue-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>`;
+    }
+  },
+  // 8: 망가진 버전 시험
+  {
+    title:'STEP 8 — 망가진 버전으로 시험',
+    build:()=>`<div class="slide-content">
+      <div class="slide-header">
+        <div class="num">STEP 8 · 안전 검증</div>
+        <h2>망가진 버전 <em>차단 시험</em></h2>
+        <p>/health가 항상 실패하는 버전을 머지 → 전환되지 않아야 클리어</p>
+      </div>
+      <div class="pipeline" id="pipe8">
+        ${pipeHTML(['🔀 PR 머지','🧪 CI 테스트','🐳 이미지 빌드','☁️ 0% 배포','🔍 스모크 테스트','✅ 전환'],['pass','pass','pass','pass','fail',''])}
+      </div>
+      <div class="term">
+        <div class="term-top"><div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div><span class="term-label">스모크 테스트 실패 → 전환 차단</span></div>
+        <div class="term-body"><span class="cmd">curl -sf "$TAG_URL/health"</span>
+<span class="r">Attempt 1/6... 503 Service Unavailable ✗</span>
+<span class="r">Attempt 2/6... 503 Service Unavailable ✗</span>
+<span class="r">Attempt 3/6... 503 Service Unavailable ✗</span>
+<span class="r">...
+Attempt 6/6... 503 Service Unavailable ✗</span>
+
+<span class="r">══ 스모크 테스트 실패! 전환하지 않음 ══</span>
+<span class="d">→ 전환 단계: SKIPPED (실행 안 됨)</span>
+<span class="d">→ 서비스 주소: 여전히 이전 리비전이 100%</span>
+<span class="g">→ 사용자 영향: 0건</span></div>
+      </div>
+      <div class="explain-grid">
+        <div class="explain-card"><div class="ec-icon">🛡️</div><h5>이중 방어</h5><p>스타트업 프로브 (/health)가 먼저 막고, 스모크 테스트가 한 번 더 확인</p></div>
+        <div class="explain-card"><div class="ec-icon">🔄</div><h5>복구</h5><p>GitHub의 Revert 버튼으로 되돌린 커밋 → 정상 배포 다시 진행</p></div>
+      </div>
+    </div>`
+  },
+  // 9: 결론
+  {
+    title:'클리어 조건 & 정리',
+    build:()=>`<div class="slide-content">
+      <div class="conclusion">
+        <div class="num" style="color:var(--accent);letter-spacing:3px;font-weight:700;font-size:.85rem">WORKFLOW COMPLETE</div>
+        <h2>무중단 배포 <em>자동화 완성</em></h2>
+        <div class="big-stats">
+          <div class="big-stat"><div class="bs-num g">0건</div><div class="bs-label">배포 중 실패</div></div>
+          <div class="big-stat"><div class="bs-num a">~3초</div><div class="bs-label">롤백 소요 시간</div></div>
+          <div class="big-stat"><div class="bs-num o">2번</div><div class="bs-label">사람이 하는 일</div></div>
+        </div>
+        <div class="check-list">
+          <div class="check-item"><span class="ci">✅</span> PR 머지 + 승인 후 손대지 않아도 새 리비전이 전환됨</div>
+          <div class="check-item"><span class="ci">✅</span> 배포 중 실패 0건 — 스크립트로 증명</div>
+          <div class="check-item"><span class="ci">✅</span> 스모크 테스트 실패 시 전환 안 됨</div>
+          <div class="check-item"><span class="ci">✅</span> 원클릭 롤백 — 버튼 하나로 이전 리비전 복구</div>
+          <div class="check-item"><span class="ci">✅</span> 워크플로 각 단계를 설명할 수 있음</div>
+          <div class="check-item"><span class="ci">✅</span> 워크플로에 시크릿(키 파일) 없음 — WIF 사용</div>
+        </div>
+      </div>
+    </div>`
+  },
+  // OUTRO: 감사합니다
+  {
+    title:'감사합니다',
+    build:()=>`<div class="slide-content">
+      <div class="cover thanks">
+        <div class="cover-bg">
+          <div class="orb orb-1"></div>
+          <div class="orb orb-2"></div>
+          <div class="orb orb-3"></div>
+        </div>
+        <div class="cover-inner">
+          <div class="thanks-emoji">🙏</div>
+          <h2><em>감사합니다</em></h2>
+          <p class="thanks-sub">질문이나 피드백이 있으시면 편하게 말씀해주세요</p>
+          <div class="cover-line"></div>
+          <div class="thanks-links">
+            <div class="tl"><span class="tl-icon">☁️</span> Cloud Run 무중단 배포</div>
+            <div class="tl"><span class="tl-icon">🔀</span> PR 머지 → 자동 전환</div>
+            <div class="tl"><span class="tl-icon">🛡️</span> 스모크 테스트 + 롤백</div>
+          </div>
+        </div>
+      </div>
+    </div>`
+  }
+];
+
+function pipeHTML(labels,states){
+  return labels.map((l,i)=>{
+    const s=states[i]||'';
+    const statusTxt=s==='pass'?'<div class="p-status ok">✓ 완료</div>':s==='lit'?'<div class="p-status run">● 실행 중</div>':s==='fail'?'<div class="p-status err">✗ 실패</div>':'';
+    return (i>0?`<span class="pipe-arrow ${s==='pass'||s==='lit'?'lit':''} ${s==='pass'?'pass':''}">→</span>`:'')+
+      `<div class="pipe-node ${s}">${l.split(' ').length>1?`<div class="p-icon">${l.split(' ')[0]}</div><div class="p-label">${l.split(' ').slice(1).join(' ')}</div>`:`<div class="p-label">${l}</div>`}${statusTxt}</div>`;
+  }).join('');
+}
+
+function animTraffic(id,bFrom,gFrom,bTo,gTo){
+  const blueEl=document.getElementById(id+'-blue');
+  const greenEl=document.getElementById(id+'-green');
+  const blueBar=document.getElementById(id+'-blue-bar');
+  const greenBar=document.getElementById(id+'-green-bar');
+  if(!blueEl)return;
+  let t=0;const dur=40;
+  const timer=setInterval(()=>{
+    t++;const p=Math.min(t/dur,1);
+    const bv=Math.round(bFrom+(bTo-bFrom)*p);
+    const gv=Math.round(gFrom+(gTo-gFrom)*p);
+    blueEl.textContent=bv+'%';greenEl.textContent=gv+'%';
+    blueBar.style.width=bv+'%';greenBar.style.width=gv+'%';
+    if(t>=dur)clearInterval(timer);
+  },30);
+}
+function showTag(id){const el=document.getElementById(id);if(el)el.classList.add('show')}
+
+let reqSimTimer=null;
+function runReqSim(){
+  const log=document.getElementById('reqLog');
+  const okEl=document.getElementById('reqOk');
+  const failEl=document.getElementById('reqFail');
+  if(!log)return;
+  let ok=0,fail=0,i=0;
+  const revs=['rev-1','rev-1','rev-1','rev-1','rev-1','rev-1','rev-1','rev-1','rev-2','rev-2','rev-2','rev-2','rev-2','rev-2','rev-2','rev-2','rev-2','rev-2'];
+  clearInterval(reqSimTimer);
+  reqSimTimer=setInterval(()=>{
+    if(i>=revs.length){clearInterval(reqSimTimer);
+      log.innerHTML+=`\n<span class="ts">═══ 요약 ═══</span>\n총 요청: <span class="rev">${ok}</span>  실패: <span class="ok">0</span>\nrev-1: 8건  rev-2: 10건\n<span class="ok">✓ 무중단 전환 증명 완료</span>`;
+      log.scrollTop=log.scrollHeight;return;
+    }
+    const now=new Date();const ts=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+    ok++;okEl.textContent=ok;
+    const rev=revs[i];
+    const marker=i===8?' ← 전환':'';
+    log.innerHTML+=`<div class="req-line ok"><span class="ts">[${ts}]</span> <span class="ok">✅</span> <span class="rev">${rev}</span>${marker}</div>`;
+    log.scrollTop=log.scrollHeight;
+    i++;
+  },200);
+}
+
+// ── TTS 대본 ──
+const SCRIPTS = [
+  '안녕하세요. 오늘은 Cloud Run으로 무중단 배포하기, PR을 머지하면 자동으로 블루그린 전환이 일어나는 워크플로를 발표하겠습니다.',
+  '전체 흐름은 이렇습니다. PR 머지, CI 테스트, 이미지 빌드, 0% 배포, 스모크 테스트, 그리고 전환. 이 6단계를 GitHub Actions가 자동으로 수행합니다. 사람이 하는 일은 머지와 승인, 딱 두 가지뿐입니다.',
+  '첫 번째 단계입니다. main 브랜치에 PR이 머지되면 deploy.yml 워크플로가 자동으로 시작됩니다. 먼저 pytest로 단위 테스트를 돌리고, ruff로 코드 스타일을 검사합니다. 여기서 테스트가 하나라도 실패하면 다음 단계로 넘어가지 않습니다.',
+  'CI를 통과하면 Docker 이미지를 빌드합니다. 태그는 커밋 SHA를 사용해서 어떤 코드로 만든 이미지인지 추적할 수 있습니다. 인증은 Workload Identity Federation을 쓰기 때문에 키 파일이 필요 없습니다.',
+  '여기가 핵심입니다. gcloud run deploy 명령에 no-traffic과 tag green 옵션을 줍니다. 새 리비전이 만들어지지만 트래픽은 0%입니다. 사용자는 여전히 이전 리비전을 사용하고 있어서 아무 영향이 없습니다.',
+  '태그 URL로 새 리비전이 정상인지 확인합니다. health 엔드포인트를 호출하고, version에서 커밋 SHA가 이번 배포와 일치하는지 체크합니다. 이 테스트가 실패하면 전환 단계로 가지 않으니까 사용자 영향은 0입니다.',
+  '스모크 테스트를 통과하면 update-traffic to-tags green=100 명령으로 트래픽을 한 번에 전환합니다. 전환 후에는 to-latest로 트래픽 고정을 풀어서 다음 배포가 정상적으로 동작하게 합니다.',
+  '배포하는 동안 정말 실패가 없었는지 증명합니다. 스크립트가 0.2초마다 서비스에 요청을 보내고, 응답 코드와 어떤 리비전이 답했는지 기록합니다. 실패 0건이면 무중단 전환이 증명된 겁니다.',
+  '만약 배포 후 문제가 발견되면 어떻게 할까요? rollback.yml 워크플로에서 Run workflow 버튼을 누르고 이전 리비전 이름을 입력하면 끝입니다. 이미지 빌드 없이 트래픽 설정만 바꾸는 거라 약 3초면 롤백이 완료됩니다.',
+  '마지막으로, 이 워크플로가 진짜 안전한지 시험합니다. health가 항상 실패하는 버전을 일부러 머지합니다. 스모크 테스트에서 6번 모두 실패하고, 전환 단계는 실행되지 않습니다. 사용자 영향은 0건입니다.',
+  '정리하겠습니다. 배포 중 실패 영 건, 롤백은 약 삼 초, 사람이 하는 일은 머지와 승인 두 번뿐입니다. 클리어 조건 여섯 가지를 모두 달성했습니다.',
+  '이상으로 Cloud Run 무중단 배포 워크플로 발표를 마치겠습니다. 감사합니다. 질문 있으시면 편하게 말씀해주세요.'
+];
+
+let voiceEnabled=true, speaking=false, koVoice=null;
+
+function loadKoVoice(){
+  const voices=speechSynthesis.getVoices();
+  const female=voices.filter(v=>v.lang.startsWith('ko'));
+  koVoice=female.find(v=>/female|여/i.test(v.name))||female.find(v=>/google/i.test(v.name))||female[0]||null;
+}
+speechSynthesis.onvoiceschanged=loadKoVoice;
+loadKoVoice();
+
+let voiceFallbackTimer=null;
+function speakSlide(idx){
+  speechSynthesis.cancel();
+  clearTimeout(voiceFallbackTimer);
+  if(!voiceEnabled||!SCRIPTS[idx]){
+    if(playing&&cur<SLIDES.length-1){voiceFallbackTimer=setTimeout(()=>next(),5000);}
+    return;
+  }
+  const u=new SpeechSynthesisUtterance(SCRIPTS[idx]);
+  u.lang='ko-KR';
+  u.rate=1.05;
+  u.pitch=1.1;
+  if(koVoice)u.voice=koVoice;
+  speaking=true;
+  u.onend=()=>{
+    speaking=false;
+    if(playing&&cur<SLIDES.length-1){setTimeout(()=>next(),800);}
+    else if(playing&&cur===SLIDES.length-1){stopPlay();}
+  };
+  u.onerror=()=>{
+    speaking=false;
+    if(playing&&cur<SLIDES.length-1){setTimeout(()=>next(),3000);}
+  };
+  speechSynthesis.speak(u);
+  voiceFallbackTimer=setTimeout(()=>{
+    if(playing&&speaking){speechSynthesis.cancel();speaking=false;if(cur<SLIDES.length-1)next();else stopPlay();}
+  },60000);
+}
+
+function toggleVoice(){
+  voiceEnabled=!voiceEnabled;
+  document.getElementById('voiceBtn').innerHTML=voiceEnabled?'🔊 음성':'🔇 음소거';
+  if(!voiceEnabled)speechSynthesis.cancel();
+}
+
+function toggleFS(){
+  if(!document.fullscreenElement){document.documentElement.requestFullscreen().catch(()=>{});}
+  else{document.exitFullscreen();}
+}
+document.addEventListener('fullscreenchange',()=>{
+  document.getElementById('fsBtn').innerHTML=document.fullscreenElement?'⛶ 나가기':'⛶ 전체화면';
+});
+
+// ── 슬라이드 제어 ──
+let cur=0, playing=false, playTimer=null;
+
+function render(){
+  const stage=document.getElementById('stage');
+  // 기존 슬라이드 exit
+  const old=stage.querySelector('.slide.active');
+  if(old){old.classList.remove('active');old.classList.add('exit');setTimeout(()=>old.remove(),500);}
+  // 새 슬라이드
+  const div=document.createElement('div');
+  div.className='slide';
+  div.innerHTML=SLIDES[cur].build();
+  stage.appendChild(div);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>div.classList.add('active')));
+  // 버튼 상태
+  document.getElementById('prevBtn').disabled=cur===0;
+  document.getElementById('nextBtn').disabled=cur===SLIDES.length-1;
+  document.getElementById('stepTitle').textContent=SLIDES[cur].title;
+  // dots
+  const dots=document.getElementById('stepDots');
+  dots.innerHTML=SLIDES.map((_,i)=>`<div class="step-dot ${i===cur?'active':i<cur?'done':''}"></div>`).join('');
+  // TTS
+  setTimeout(()=>speakSlide(cur),600);
+}
+
+function next(){if(cur<SLIDES.length-1){cur++;render();}else{stopPlay()}}
+function prev(){if(cur>0){cur--;render();}}
+function togglePlay(){
+  if(playing){stopPlay();}
+  else{
+    playing=true;
+    document.getElementById('playBtn').innerHTML='⏸ 일시정지';
+    if(voiceEnabled){
+      speakSlide(cur);
+    } else {
+      playTimer=setInterval(()=>{if(cur<SLIDES.length-1)next();else stopPlay();},6000);
+    }
+  }
+}
+function stopPlay(){playing=false;clearInterval(playTimer);speechSynthesis.cancel();document.getElementById('playBtn').innerHTML='▶ 자동 재생';}
+
+// 키보드
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();next();}
+  else if(e.key==='ArrowLeft'){e.preventDefault();prev();}
+  else if(e.key==='p'||e.key==='P'){togglePlay();}
+});
+
+render();
+</script>
+</body>
+</html>
